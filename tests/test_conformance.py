@@ -57,12 +57,25 @@ def test_run_survives_a_malformed_task(tmp_path, monkeypatch):
     ]
 
 
-def test_run_requires_allowed_models_env(tmp_path, monkeypatch):
+def test_run_without_allowed_models_writes_empty_answers(tmp_path, monkeypatch):
     input_path = tmp_path / "tasks.json"
-    input_path.write_text("[]")
+    input_path.write_text(json.dumps([{"task_id": "t1", "prompt": "hi"}]))
+    output_path = tmp_path / "results.json"
     monkeypatch.delenv("ALLOWED_MODELS", raising=False)
-    with pytest.raises(RuntimeError):
-        run(str(input_path), str(tmp_path / "results.json"), client=StubClient(stub_response(["x"])))
+    rc = run(str(input_path), str(output_path), client=StubClient(stub_response(["x"])))
+
+    assert rc == 0
+    assert json.loads(output_path.read_text()) == [{"task_id": "t1", "answer": ""}]
+
+
+def test_run_without_input_writes_empty_results(tmp_path, monkeypatch):
+    monkeypatch.setenv("ALLOWED_MODELS", "stub-model")
+    output_path = tmp_path / "results.json"
+
+    rc = run(str(tmp_path / "missing.json"), str(output_path), client=StubClient(stub_response(["x"])))
+
+    assert rc == 0
+    assert json.loads(output_path.read_text()) == []
 
 
 def test_run_creates_output_dir(tmp_path, monkeypatch):

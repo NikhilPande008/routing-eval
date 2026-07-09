@@ -1,0 +1,269 @@
+[
+  {
+    "task_id": "acc-knowledge-01",
+    "category": "knowledge",
+    "prompt": "What is the capital of Australia, and what body of water is it near?",
+    "gold": ["Canberra Lake Burley Griffin"],
+    "scorer": "token_f1",
+    "note": "= practice-01, the real practice task"
+  },
+  {
+    "task_id": "acc-knowledge-02",
+    "category": "knowledge",
+    "prompt": "What year did the Berlin Wall fall, and what year did Germany reunify?",
+    "gold": ["1989 1990"],
+    "scorer": "token_f1",
+    "note": "DRAFT gold -- please confirm: Wall fell 1989, reunification 1990"
+  },
+  {
+    "task_id": "acc-knowledge-03",
+    "category": "knowledge",
+    "prompt": "Who wrote the novel '1984', and in what year was it first published?",
+    "gold": ["George Orwell 1949"],
+    "scorer": "token_f1",
+    "note": "DRAFT gold -- please confirm: Orwell, published 1949"
+  },
+  {
+    "task_id": "acc-knowledge-04",
+    "category": "knowledge",
+    "prompt": "What is the smallest sovereign country in the world by land area?",
+    "gold": "Vatican City",
+    "scorer": "exact",
+    "scorer_opts": {"strip_punct": true},
+    "note": "DRAFT gold -- please confirm: Vatican City"
+  },
+
+  {
+    "task_id": "acc-math-01",
+    "category": "math",
+    "prompt": "A store has 240 items. It sells 15% on Monday and 60 more on Tuesday. How many items remain?",
+    "gold": 144,
+    "scorer": "numeric",
+    "note": "= practice-02, the real practice task. 240*0.85-60=144, verified by computation"
+  },
+  {
+    "task_id": "acc-math-02",
+    "category": "math",
+    "prompt": "A rectangular garden is 18 meters long and 12 meters wide. A gravel path 1.5 meters wide is built around the entire outside of the garden. What is the area of the path alone, in square meters?",
+    "gold": 99,
+    "scorer": "numeric",
+    "note": "DRAFT gold -- verified by computation: (21*15)-(18*12)=99"
+  },
+  {
+    "task_id": "acc-math-03",
+    "category": "math",
+    "prompt": "If a train travels at 80 km/h for 2.5 hours, then at 60 km/h for 1.5 hours, what is its average speed for the entire trip in km/h?",
+    "gold": 72.5,
+    "scorer": "numeric",
+    "note": "DRAFT gold -- verified by computation: (80*2.5+60*1.5)/(2.5+1.5)=72.5"
+  },
+  {
+    "task_id": "acc-math-04",
+    "category": "math",
+    "prompt": "A shirt originally costs $40. It's discounted by 25%, then an additional 10% off the discounted price. What is the final price?",
+    "gold": 27,
+    "scorer": "numeric",
+    "note": "DRAFT gold -- verified by computation: 40*0.75*0.9=27"
+  },
+
+  {
+    "task_id": "acc-sentiment-01",
+    "category": "sentiment",
+    "prompt": "Classify the sentiment of this review: The battery life is great, but the screen scratches too easily.",
+    "gold": "Mixed",
+    "scorer": "token_f1",
+    "note": "= practice-03. PROXY SCORE ONLY -- hand-judge the justification quality from the raw answer"
+  },
+  {
+    "task_id": "acc-sentiment-02",
+    "category": "sentiment",
+    "prompt": "Classify the sentiment: 'I guess it works fine, nothing special, does what it says on the box.'",
+    "gold": "Neutral",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, deliberately borderline -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-sentiment-03",
+    "category": "sentiment",
+    "prompt": "Classify the sentiment: 'This used to be my favorite restaurant, but after tonight, I don't think I'll be coming back.'",
+    "gold": "Negative",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, implicit negative (no explicit negative words) -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-sentiment-04",
+    "category": "sentiment",
+    "prompt": "Classify the sentiment: 'Honestly? Best decision I never wanted to make.'",
+    "gold": "Positive",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, deliberately ambiguous/hard -- PROXY SCORE ONLY, hand-judge, may be genuinely debatable"
+  },
+
+  {
+    "task_id": "acc-summarization-01",
+    "category": "summarization",
+    "prompt": "Summarize the following in exactly one sentence: The city council voted Tuesday to approve a $2.3 million budget for park renovations, with the funds earmarked for new playground equipment, updated irrigation systems, and accessibility improvements across twelve public parks over the next two years.",
+    "gold": "The city council approved a $2.3 million two-year budget for park renovations covering playground equipment, irrigation, and accessibility improvements across twelve parks.",
+    "scorer": "token_f1",
+    "note": "= practice-04. PROXY SCORE ONLY (ROUGE-like token overlap) -- hand-judge faithfulness"
+  },
+  {
+    "task_id": "acc-summarization-02",
+    "category": "summarization",
+    "prompt": "Summarize in one sentence: Despite initial delays caused by a shortage of specialized components, the manufacturing plant resumed full production in March, ultimately exceeding its annual output target by 8% despite having lost six weeks of operating time.",
+    "gold": "Despite losing six weeks to a component shortage, the plant still exceeded its annual output target by 8% after resuming full production in March.",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, hard because of the counter-intuitive twist (delays but still beat target) -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-summarization-03",
+    "category": "summarization",
+    "prompt": "Summarize in one sentence: The study found that while the new drug reduced symptoms in 62% of patients, it also produced mild side effects in nearly a third of participants, leading researchers to recommend further trials before wider approval.",
+    "gold": "The new drug reduced symptoms in 62% of patients but caused mild side effects in about a third, so researchers recommend further trials before approval.",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, hard because it must balance efficacy AND side effects -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-summarization-04",
+    "category": "summarization",
+    "prompt": "Summarize in one sentence: The merger, originally valued at $4.1 billion, was renegotiated down to $3.6 billion after regulators raised antitrust concerns, though both companies still expect the deal to close by year end.",
+    "gold": "The merger's value was renegotiated from $4.1 billion to $3.6 billion over antitrust concerns, but the companies still expect to close by year end.",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, hard because it needs both the original and renegotiated figures -- PROXY SCORE ONLY, hand-judge"
+  },
+
+  {
+    "task_id": "acc-entity_extraction-01",
+    "category": "entity_extraction",
+    "prompt": "Extract all named entities and their types from: Maria Sanchez joined Fireworks AI in Berlin last March.",
+    "gold": "Maria Sanchez PERSON Fireworks AI ORGANIZATION Berlin LOCATION last March DATE",
+    "scorer": "token_f1",
+    "note": "= practice-05. PROXY SCORE ONLY -- hand-judge, type-label conventions vary (e.g. LOCATION vs GPE)"
+  },
+  {
+    "task_id": "acc-entity_extraction-02",
+    "category": "entity_extraction",
+    "prompt": "Extract all named entities and their types from: Dr. Elena Vasquez, a researcher at MIT, presented her findings on climate change at the United Nations Climate Summit in Geneva on March 15, 2024.",
+    "gold": "Elena Vasquez PERSON MIT ORGANIZATION United Nations Climate Summit EVENT Geneva LOCATION March 15 2024 DATE",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, harder: 5 entities of 4 different types -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-entity_extraction-03",
+    "category": "entity_extraction",
+    "prompt": "Extract all named entities and their types from: Apple Inc. announced that Tim Cook will step down as CEO in December, with Sundar Pichai rumored as a potential successor, according to a report by Bloomberg.",
+    "gold": "Apple Inc ORGANIZATION Tim Cook PERSON December DATE Sundar Pichai PERSON Bloomberg ORGANIZATION",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, harder: two people, two orgs -- PROXY SCORE ONLY, hand-judge"
+  },
+  {
+    "task_id": "acc-entity_extraction-04",
+    "category": "entity_extraction",
+    "prompt": "Extract all named entities and their types from: The Amazon rainforest, spanning across Brazil, Peru, and Colombia, lost approximately 11,000 square kilometers of forest cover in 2023, according to data from NASA.",
+    "gold": "Amazon rainforest LOCATION Brazil LOCATION Peru LOCATION Colombia LOCATION 11000 square kilometers QUANTITY 2023 DATE NASA ORGANIZATION",
+    "scorer": "token_f1",
+    "note": "DRAFT gold, harder: multiple locations + a quantity entity -- PROXY SCORE ONLY, hand-judge"
+  },
+
+  {
+    "task_id": "acc-code_debug-01",
+    "category": "code_debug",
+    "prompt": "This function should return the max of a list but has a bug: def get_max(nums): return nums[0]. Find and fix it.",
+    "gold": "assert get_max([3,1,4,1,5,9,2,6]) == 9\nassert get_max([-5,-1,-10]) == -1\nassert get_max([7]) == 7",
+    "scorer": "code_tests",
+    "note": "= practice-06. Gold is an executable test harness, verified against a correct reference impl"
+  },
+  {
+    "task_id": "acc-code_debug-02",
+    "category": "code_debug",
+    "prompt": "This function should return True if a string is a palindrome, ignoring case and spaces, but has a bug: def is_palindrome(s): s = s.lower(); return s == s[::-1]. Find and fix it.",
+    "gold": "assert is_palindrome('A man a plan a canal Panama') == True\nassert is_palindrome('Hello') == False\nassert is_palindrome('Was it a car or a cat I saw') == True",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl. Bug: doesn't strip spaces before comparing"
+  },
+  {
+    "task_id": "acc-code_debug-03",
+    "category": "code_debug",
+    "prompt": "This function should remove duplicates from a list while preserving order, but has a bug: def dedupe(items): return list(set(items)). Find and fix it.",
+    "gold": "assert dedupe([3,1,2,1,3]) == [3,1,2]\nassert dedupe([1,1,1]) == [1]\nassert dedupe([]) == []",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl. Bug: set() doesn't preserve order"
+  },
+  {
+    "task_id": "acc-code_debug-04",
+    "category": "code_debug",
+    "prompt": "This function should compute the factorial of n, but has a bug: def factorial(n):\n    if n == 0:\n        return 0\n    return n * factorial(n-1). Find and fix it.",
+    "gold": "assert factorial(5) == 120\nassert factorial(0) == 1\nassert factorial(1) == 1",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl. Bug: base case returns 0 instead of 1"
+  },
+
+  {
+    "task_id": "acc-code_gen-01",
+    "category": "code_gen",
+    "prompt": "Write a Python function that returns the second-largest number in a list, handling duplicates correctly.",
+    "gold": "assert second_largest([1,2,3,4,5,5]) == 4\nassert second_largest([5,5,5,1]) == 1\nassert second_largest([3,1]) == 1",
+    "scorer": "code_tests",
+    "note": "= practice-08. No explicit function name given in the original prompt; both models have consistently used 'second_largest' in prior runs"
+  },
+  {
+    "task_id": "acc-code_gen-02",
+    "category": "code_gen",
+    "prompt": "Write a Python function named is_anagram(s1, s2) that returns True if the two strings are anagrams of each other, ignoring case and spaces.",
+    "gold": "assert is_anagram('Listen', 'Silent') == True\nassert is_anagram('hello', 'world') == False\nassert is_anagram('Dormitory', 'Dirty Room') == True",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl. Function name specified explicitly to keep the test harness unambiguous"
+  },
+  {
+    "task_id": "acc-code_gen-03",
+    "category": "code_gen",
+    "prompt": "Write a Python function named most_frequent(items) that returns the most frequent element in a list; if there is a tie, return the one that appears first in the list.",
+    "gold": "assert most_frequent([1,2,2,3,3,1,1]) == 1\nassert most_frequent(['a','b','b','a']) == 'a'\nassert most_frequent([5]) == 5",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl"
+  },
+  {
+    "task_id": "acc-code_gen-04",
+    "category": "code_gen",
+    "prompt": "Write a Python function named flatten(nested) that flattens a nested list of arbitrary depth into a single flat list.",
+    "gold": "assert flatten([1,[2,3,[4,5]],6]) == [1,2,3,4,5,6]\nassert flatten([[1,2],[3,[4,[5]]]]) == [1,2,3,4,5]\nassert flatten([]) == []",
+    "scorer": "code_tests",
+    "note": "DRAFT gold test harness, verified against a correct reference impl"
+  },
+
+  {
+    "task_id": "acc-logic-01",
+    "category": "logic",
+    "prompt": "Three friends, Sam, Jo, and Lee, each own a different pet: cat, dog, bird. Sam does not own the bird. Jo owns the dog. Who owns the cat?",
+    "gold": "Sam",
+    "scorer": "exact",
+    "scorer_opts": {"strip_punct": true},
+    "note": "= practice-07, the real practice task. Verified unique solution"
+  },
+  {
+    "task_id": "acc-logic-02",
+    "category": "logic",
+    "prompt": "Four people -- Alex, Blake, Casey, and Drew -- each have a different favorite color: red, blue, green, yellow. Alex doesn't like red or blue. Blake likes green. Casey doesn't like yellow. Drew likes red. What color does Alex like?",
+    "gold": "yellow",
+    "scorer": "exact",
+    "scorer_opts": {"strip_punct": true},
+    "note": "DRAFT gold -- verified unique solution: Blake=green, Drew=red, Alex must be yellow (not blue), Casey=blue"
+  },
+  {
+    "task_id": "acc-logic-03",
+    "category": "logic",
+    "prompt": "Five houses in a row are numbered 1 to 5. The Blue house is at position 1. The Green house is at position 3. The Red house is somewhere to the right of the Blue house but not adjacent to the Green house. What position is the Red house?",
+    "gold": "5",
+    "scorer": "numeric",
+    "note": "DRAFT gold -- verified unique solution: Red must be >1 and not in {2,4} (adjacent to 3), leaving only 5"
+  },
+  {
+    "task_id": "acc-logic-04",
+    "category": "logic",
+    "prompt": "Three boxes are labeled 'Apples', 'Oranges', and 'Mixed', but all three labels are wrong. You pick one fruit from the box labeled 'Mixed' and get an apple. What does the box labeled 'Mixed' actually contain?",
+    "gold": "Apples",
+    "scorer": "exact",
+    "scorer_opts": {"strip_punct": true},
+    "note": "DRAFT gold -- verified unique solution (classic puzzle): since all labels are wrong, 'Mixed' can't be mixed, and drawing an apple confirms it's all apples"
+  }
+]

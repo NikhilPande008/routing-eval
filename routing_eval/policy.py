@@ -27,6 +27,21 @@ tiers/models, fed by Step 2's probe-local (local-viability) and bakeoff
 (per-category model ranking) outputs. Run it AFTER launch-day calibration;
 its output is a DRAFT (routing_policy.draft.json by default) -- review before
 replacing the checked-in default.
+
+2026-07-09 (D37): PolicyRouter's default classifier is now TwoWayClassifier
+(classify.py), not the 8-way KeywordClassifier. D35 found kimi-k2p7-code
+comparable-or-better than minimax-m3 in every category, so an 8-way split no
+longer changes which model gets called -- the only thing category still
+controls is which of 3 prompt templates is used (code_only /
+sentiment_with_justification / generic default), and D29/D36 showed the
+8-way classifier doesn't reliably get even THAT right. TwoWayClassifier
+detects only "code" and "sentiment"; everything else is "general", which
+isn't a key in routing_policy.default.json so it falls through "_default"
+exactly like an unmatched 8-way category always did. The checked-in default
+below keeps "code_debug"/"code_gen" as separate entries (identical to
+"code") purely so KeywordClassifier-based tooling (bakeoff/generate-policy,
+still calibrated against the 8-way taxonomy) keeps resolving correctly;
+nothing currently classifies into those two names in the deployed path.
 """
 from __future__ import annotations
 
@@ -38,7 +53,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from .classify import Classifier, KeywordClassifier
+from .classify import Classifier, TwoWayClassifier
 from .llm.runners import LocalRunner, RemoteRunner
 from .modelids import normalize_model_id
 from .modelselect import LocalViability, ModelCategoryRanking
@@ -138,7 +153,7 @@ class PolicyRouter:
         self.policy = policy
         self.remote_client = remote_client
         self.allowed_models = allowed_models
-        self.classifier = classifier or KeywordClassifier()
+        self.classifier = classifier or TwoWayClassifier()
         self.local = local
         self.low_confidence_threshold = low_confidence_threshold
         self.default_timeout_s = default_timeout_s

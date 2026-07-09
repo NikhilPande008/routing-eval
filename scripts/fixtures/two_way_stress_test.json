@@ -1,0 +1,28 @@
+[
+  {"category": "code", "prompt": "Here's something meant to double every value in a list but it doesn't work: doubled = [x for x in nums]. What's the correct version?"},
+  {"category": "code", "prompt": "This snippet is meant to find the larger of two numbers but always picks the first one: bigger = a if True else b. Correct it."},
+  {"category": "code", "prompt": "I have some logic that should sum a list of numbers but only returns zero: total = 0; for n in nums: pass. Sort it out."},
+  {"category": "code", "prompt": "Give me something that checks if a number is prime, expressed as executable statements a computer could run."},
+  {"category": "code", "prompt": "Turn this idea into runnable statements: given two numbers, swap their values without a third variable."},
+  {"category": "code", "prompt": "There's an off-by-one somewhere in: idx = len(items); items[idx]. Track it down and correct it."},
+  {"category": "code", "prompt": "I'd like an implementation of Fibonacci as an executable routine."},
+  {"category": "code", "prompt": "Somebody wrote logic that's supposed to reverse a list in place but ends up returning None: nums.reverse(); result = nums. Where's the mistake?"},
+
+  {"category": "sentiment", "prompt": "Would you call this review upbeat or downbeat: 'Great sound quality, terrible battery life.'"},
+  {"category": "sentiment", "prompt": "Read this note and tell me if the writer seems happy or upset: 'I can't believe how well this turned out, exceeded every expectation.'"},
+  {"category": "sentiment", "prompt": "Here's a comment left by a customer -- does it read as praise or a complaint? 'Support took three weeks to respond and never fixed the issue.'"},
+  {"category": "sentiment", "prompt": "This message came in from a client -- is it a compliment or a gripe: 'Honestly the onboarding was smoother than I expected.'"},
+  {"category": "sentiment", "prompt": "Read the following and say whether the person liked or disliked their stay: 'The pool was closed the entire week we were there.'"},
+  {"category": "sentiment", "prompt": "Someone left this note on the receipt -- is it a rave or a rant? 'Waited forty minutes for cold food.'"},
+  {"category": "sentiment", "prompt": "Judging by this line, was the experience good or bad for them: 'Would not go back if you paid me.'"},
+  {"category": "sentiment", "prompt": "This is a snippet from a survey response -- happy customer or unhappy one? 'Everything about the checkout process just clicked.'"},
+
+  {"category": "general", "prompt": "What's the boiling point of water at sea level, in Celsius?"},
+  {"category": "general", "prompt": "A cyclist rides 20 km at 10 km/h then rests, then rides another 15 km at 5 km/h. How long was the cyclist actually moving?"},
+  {"category": "general", "prompt": "Two suspects, Ray and Vic, gave alibis. Ray says he was with Vic. Vic says he was alone. Only one of them is lying. Who is lying?"},
+  {"category": "general", "prompt": "Condense the following into one line: after three rounds of funding, the startup raised $40 million total and used it to expand into two new markets."},
+  {"category": "general", "prompt": "Name every person and company mentioned here: Priya Rao met with executives from Delta Airlines in Atlanta on a Tuesday."},
+  {"category": "general", "prompt": "A loyalty program gives customers 2 points per dollar, doubled on weekends. How many points does a $30 weekend purchase earn?"},
+  {"category": "general", "prompt": "The area code for this city changed last year -- what's the postal code region called in the UK equivalent system?"},
+  {"category": "general", "prompt": "What training program did the astronaut corps use before the first shuttle launch?"}
+]

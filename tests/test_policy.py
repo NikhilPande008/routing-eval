@@ -1,6 +1,6 @@
 import time
 
-from routing_eval.classify import ClassificationResult
+from routing_eval.classify import ClassificationResult, TwoWayClassifier
 from routing_eval.llm import StubClient, stub_response
 from routing_eval.llm.runners import LocalRunner
 from routing_eval.modelselect import LocalViability, ModelCategoryRanking
@@ -45,6 +45,18 @@ def test_checked_in_default_routes_everything_to_fireworks_pinned_to_kimi():
     entry = resolve_entry(policy, "anything")
     assert entry.tier == "fireworks"
     assert entry.model == "kimi-k2p7-code"
+
+
+def test_policy_router_defaults_to_two_way_classifier_not_keyword_classifier():
+    """D37: PolicyRouter's default classifier is now TwoWayClassifier (code /
+    sentiment / general), not the retired 8-way KeywordClassifier -- this is
+    what makes the swap take effect on the real deployed score path (nothing
+    in conformance.py/cli.py's `score` command passes a classifier
+    explicitly, so this default IS the deployed behavior)."""
+    policy = load_policy(DEFAULT_POLICY_PATH)
+    router = PolicyRouter(policy, remote_client=StubClient(stub_response(["ok"])),
+                          allowed_models=["m"])
+    assert isinstance(router.classifier, TwoWayClassifier)
 
 
 def test_resolve_entry_falls_back_through_default_then_safe_fallback():
@@ -96,12 +108,17 @@ def test_fireworks_tier_hits_the_policy_specified_model():
 def test_checked_in_default_routes_code_and_sentiment_categories_to_the_right_template():
     from routing_eval.policy import CODE_ONLY_SYSTEM, SENTIMENT_SYSTEM
     policy = load_policy(DEFAULT_POLICY_PATH)
+    # "code" is what TwoWayClassifier (D37, the deployed default) actually
+    # emits; "code_debug"/"code_gen" are kept only for KeywordClassifier-based
+    # tooling (bakeoff/generate-policy) -- all three must still resolve to
+    # the same code_only template.
+    assert resolve_entry(policy, "code").prompt_template == "code_only"
     assert resolve_entry(policy, "code_debug").prompt_template == "code_only"
     assert resolve_entry(policy, "code_gen").prompt_template == "code_only"
     assert resolve_entry(policy, "sentiment").prompt_template == "sentiment_with_justification"
     # tier/model: all pinned to kimi-k2p7-code (D30's bake-off winner) -- only
     # the prompt template differs by category
-    for cat in ("code_debug", "code_gen", "sentiment"):
+    for cat in ("code", "code_debug", "code_gen", "sentiment"):
         entry = resolve_entry(policy, cat)
         assert entry.tier == "fireworks" and entry.model == "kimi-k2p7-code"
     assert PROMPT_TEMPLATES["code_only"] == CODE_ONLY_SYSTEM

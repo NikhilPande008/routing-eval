@@ -18,6 +18,10 @@ records.json
 frontier.csv
 *.frontier.csv
 
+# Documentation
+*.md
+!/README.md
+
 # Secrets -- never commit (FIREWORKS_API_KEY etc.)
 .env
 .env.*

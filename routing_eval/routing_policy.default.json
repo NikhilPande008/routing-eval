@@ -1,4 +1,10 @@
 {
+  "code": {
+    "tier": "fireworks",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 256,
+    "prompt_template": "code_only"
+  },
   "code_debug": {
     "tier": "fireworks",
     "model": "kimi-k2p7-code",

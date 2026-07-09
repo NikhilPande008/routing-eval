@@ -29,9 +29,13 @@ COPY routing_eval ./routing_eval
 # build early if anything is broken.
 RUN pip install . && python -c "import routing_eval; print('build import OK')"
 
-# Run as non-root; /tmp stays writable for records/frontier output.
-RUN useradd --create-home --uid 10001 appuser
-USER appuser
+# Create the scoring mount points so an evaluator dry-run without bind mounts
+# still exits cleanly. The container intentionally runs as root: on Linux
+# graders, /output is commonly a root-owned bind mount, and a non-root user can
+# crash while writing /output/results.json even when the entrypoint is correct.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /input /output \
+    && chown -R appuser:appuser /input /output
 
 ENTRYPOINT ["routing-eval"]
 CMD ["score"]
