@@ -1,0 +1,22 @@
+# Keep the build context tiny and the image clean. The Dockerfile only copies
+# pyproject.toml, README.md, and routing_eval/ -- everything else is excluded.
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+tests/
+scripts/
+skills/
+*.md
+!README.md
+*.json
+!routing_eval/routing_policy.default.json
+*.csv
+.venv/
+venv*/
+build/
+dist/
+*.egg-info/

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "routing-eval"
+version = "0.1.0"
+description = "Token-vs-accuracy frontier harness for cascade LLM routing"
+requires-python = ">=3.9"
+
+[project.scripts]
+routing-eval = "routing_eval.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["routing_eval*"]
+
+[tool.setuptools.package-data]
+# Ships the checked-in safe-default routing policy (routing_eval/policy.py)
+# inside the installed package / container image.
+routing_eval = ["*.json"]

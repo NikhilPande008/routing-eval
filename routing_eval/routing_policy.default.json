@@ -1,0 +1,26 @@
+{
+  "code_debug": {
+    "tier": "fireworks",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 256,
+    "prompt_template": "code_only"
+  },
+  "code_gen": {
+    "tier": "fireworks",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 256,
+    "prompt_template": "code_only"
+  },
+  "sentiment": {
+    "tier": "fireworks",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 256,
+    "prompt_template": "sentiment_with_justification"
+  },
+  "_default": {
+    "tier": "fireworks",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 256,
+    "prompt_template": "default"
+  }
+}

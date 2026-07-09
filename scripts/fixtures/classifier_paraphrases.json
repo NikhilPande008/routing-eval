@@ -1,0 +1,46 @@
+[
+  {"category": "knowledge", "prompt": "Name the longest river in South America."},
+  {"category": "knowledge", "prompt": "Identify the currency used in Japan."},
+  {"category": "knowledge", "prompt": "In which continent is the Amazon rainforest located?"},
+  {"category": "knowledge", "prompt": "Who painted the Mona Lisa?"},
+
+  {"category": "math", "prompt": "A bakery had 150 loaves of bread. It sold 40% in the morning and 20 more in the afternoon. What quantity remains unsold?"},
+  {"category": "math", "prompt": "There are 84 chairs in a hall arranged in rows. If 6 rows of 7 chairs each are removed, calculate the chairs remaining."},
+  {"category": "math", "prompt": "A tank holds 500 liters and leaks 25 liters per hour for 6 hours straight. Determine the volume of water left."},
+  {"category": "math", "prompt": "Convert 3 hours and 45 minutes entirely into minutes."},
+
+  {"category": "wordplay", "prompt": "Reading 'stressed' from right to left instead of left to right, what do you get?"},
+  {"category": "wordplay", "prompt": "Rearrange the characters in 'listen' to form a different valid English term."},
+  {"category": "wordplay", "prompt": "If every character in 'cat' is shifted to the previous one in the alphabet, what results?"},
+  {"category": "wordplay", "prompt": "Say the days of the week starting from Sunday, but in the opposite sequence."},
+
+  {"category": "sentiment", "prompt": "Is this restaurant review positive or negative: The food was delicious but the service was painfully slow?"},
+  {"category": "sentiment", "prompt": "How does the customer feel about this product, based on this comment: Arrived broken and support never responded."},
+  {"category": "sentiment", "prompt": "Determine the tone of this message: Absolutely loved the concert, best night ever!"},
+  {"category": "sentiment", "prompt": "Would you say this comment is favorable or unfavorable: The hotel room was clean but overpriced for what you get."},
+
+  {"category": "summarization", "prompt": "Condense this into a single line: The company reported strong quarterly earnings, driven by higher overseas sales, cost-cutting measures, and a new product launch that exceeded internal targets."},
+  {"category": "summarization", "prompt": "Give me the gist of this paragraph in a few words: After months of negotiation, the two nations signed a trade agreement expected to lower tariffs on agricultural goods starting next year."},
+  {"category": "summarization", "prompt": "Shorten this passage down to its key point: The research team discovered a new species of frog in the Amazon basin, notable for its unusual bright blue coloration and nocturnal hunting behavior."},
+  {"category": "summarization", "prompt": "Reduce this text to its main idea: Following the merger, the new company will operate under a unified brand, consolidating over a dozen regional offices into three central hubs."},
+
+  {"category": "entity_extraction", "prompt": "List the people, places, and organizations mentioned in: Dr. Amara Okafor presented her findings at Stanford University last November."},
+  {"category": "entity_extraction", "prompt": "Identify who and where are referenced in this sentence: The shipment left the Rotterdam port bound for Singapore, handled by Maersk Logistics."},
+  {"category": "entity_extraction", "prompt": "Pull out the key proper nouns from: Elon Musk announced the new factory would be built near Austin, Texas."},
+  {"category": "entity_extraction", "prompt": "What people, places, or organizations appear in this text: The Louvre Museum in Paris will host an exhibit curated by Sofia Bertrand."},
+
+  {"category": "code_debug", "prompt": "This function is supposed to reverse a string but doesn't work correctly: def reverse_str(s): return s[0:-1]. Correct the implementation."},
+  {"category": "code_debug", "prompt": "The following code should check if a number is even, but always returns False: def is_even(n): return n % 2 == 1. Identify the mistake and correct it."},
+  {"category": "code_debug", "prompt": "Something is wrong with this loop -- it never terminates: def countdown(n):\n    while n > 0:\n        print(n)\n\nRewrite it so it works properly."},
+  {"category": "code_debug", "prompt": "This code throws an error when given an empty list: def average(nums): return sum(nums)/len(nums). Make it handle that case correctly."},
+
+  {"category": "logic", "prompt": "Four coworkers, Ana, Ben, Cleo, and Dan, sit in a row. Ana is not at either end. Ben sits immediately to the left of Cleo. Dan sits at the right end. What is the seating order?"},
+  {"category": "logic", "prompt": "A red box, a blue box, and a green box each contain a single item: a coin, a key, or a ring. The coin is not in the green box. The key is in the red box. Which box holds the ring?"},
+  {"category": "logic", "prompt": "Three runners finished a race in some order. Priya finished before Sam. Tom did not finish last. Who finished first if Sam did not finish first?"},
+  {"category": "logic", "prompt": "A farmer has chickens and cows totaling 10 animals and 28 legs in all. How many chickens does the farmer have?"},
+
+  {"category": "code_gen", "prompt": "Create a function that checks whether a given string is a palindrome."},
+  {"category": "code_gen", "prompt": "I need code that returns the factorial of a non-negative integer."},
+  {"category": "code_gen", "prompt": "Produce a function to count the number of vowels in a string."},
+  {"category": "code_gen", "prompt": "Generate a script that merges two sorted lists into one sorted list."}
+]
