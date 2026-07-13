@@ -147,6 +147,7 @@ def _entity_problem(prompt: str, answer: str) -> Optional[str]:
     prompt_lower = prompt.lower()
     valid = 0
     other = 0
+    entity_texts = []
     for ln in lines:
         m = _ENTITY_LINE_RE.match(ln.strip())
         if not m:
@@ -158,6 +159,7 @@ def _entity_problem(prompt: str, answer: str) -> Optional[str]:
             return f"entity not found in the text: {entity!r}"
         if m.group(2) not in _OFFICIAL_ENTITY_TYPES:
             return f"unofficial entity label: {m.group(2)!r}"
+        entity_texts.append((entity, m.group(2)))
         # Merged-entity fence (judge-proxy caught the 1.5B emitting
         # "United Nations Climate Summit in Geneva -- LOCATION": in-text and
         # officially labeled, but it swallows a separate entity -- missing
@@ -172,6 +174,19 @@ def _entity_problem(prompt: str, answer: str) -> Optional[str]:
         return "no 'entity -- TYPE' lines"
     if other > 1:
         return f"{other} non-entity lines (prose instead of a list)"
+    # Split-entity fence (2026-07-13, official T05: the 1.5B emitted
+    # "March 15 -- DATE" and "2023 -- DATE" where "March 15 2023" is ONE
+    # entity -- a rubric fail). Only fires on SAME-TYPE entities that are
+    # space-contiguous in the text: two DATEs (or two of any type) that join
+    # into a single span were almost certainly one entity wrongly split.
+    # Different-type adjacency ("March 15 2023, Sundar Pichai") is normal and
+    # must NOT trip this. Escalation is accuracy-safe (remote gets it right).
+    for a, ta in entity_texts:
+        for b, tb in entity_texts:
+            if a is b or ta != tb:
+                continue
+            if f"{a} {b}".lower() in prompt_lower:
+                return f"suspected split {ta} entity: {a!r} + {b!r} contiguous in the text"
     return None
 
 

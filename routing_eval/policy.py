@@ -262,13 +262,25 @@ class PolicyRouter:
             self._executor.shutdown(wait=False)
 
     def _pick_retry_model(self, used_model: str) -> Optional[str]:
-        """A different model from ALLOWED_MODELS to retry with -- never a
-        hardcoded model ID; whichever models are actually injected at
-        runtime decide what "the other model" is. Picks the first entry
-        that isn't the one just tried; None if ALLOWED_MODELS has no
-        alternative (e.g. only one model configured)."""
+        """A different model from ALLOWED_MODELS to retry a blank/failed
+        answer with. PREFERS known-good workhorses (kimi, then minimax) over
+        whatever ordering ALLOWED_MODELS happens to have -- 2026-07-13: the
+        Gemma account's ALLOWED_MODELS lists the bare gemma-4-* base names
+        FIRST, and those are NOT deployed (only a custom deployment id is),
+        so the old "first entry != used_model" picked an undeployed base
+        name that 404'd and shipped an EMPTY answer (official T02b). Falls
+        back to any other entry only if neither preferred model is available.
+        None if there is no alternative at all."""
+        preferred = ("kimi-k2p7-code", "minimax-m3")
+        for pref in preferred:
+            for m in self.allowed_models:
+                if m != used_model and (m == pref or m.endswith("/" + pref)):
+                    return m
+        # 2026-07-13: skip bare gemma-4-* base names -- undeployed on the
+        # Gemma account (the deployment is a custom accounts/.../deployments/
+        # id, never a bare base name), so retrying one just 404s.
         for m in self.allowed_models:
-            if m != used_model:
+            if m != used_model and "gemma-4-" not in m:
                 return m
         return None
 
