@@ -1,5 +1,5 @@
 {
-  "__comment__": "Gemma HYBRID line (2026-07-13, gemma-2): after the pure-Gemma line failed the 80% gate live (15/19, math the culprit), the HARD reasoning categories (math, logic, code/code_debug/code_gen) escalate to kimi-k2p7-code (proven, leaner, correct on multi-step arithmetic where gemma-4-31b is unreliable); the SOFT categories (sentiment, entity_extraction, summarization, _default/knowledge) keep the 'gemma' sentinel (resolved from GEMMA_MODEL_ID at runtime, kimi fallback on API failure). Local tier unchanged (copied from the kimi default). Remote/escalation templates unchanged.",
+  "__comment__": "Gemma HONEST line (2026-07-13, gemma-3). Gemma is the PRIMARY answerer (tier=fireworks, model='gemma' sentinel -> GEMMA_MODEL_ID) for the four categories the competence battery showed it is genuinely strong at: sentiment, entity_extraction, summarization, and _default/knowledge (official proxy: sentiment 2/2, entity 1/1, summarization 2/2, knowledge 3/3). These are NOT local-first, so Gemma actually serves them rather than catching rare local-tier escalations. math and logic go to kimi-k2p7-code (Gemma reproducibly fails multi-step % arithmetic; logic is historically flaky). code stays local-first -> kimi (cheap, Gemma not needed). REQUIRES a WARM deployment (Fireworks console: deployment min replicas = 1, disable scale-to-zero) or every Gemma call 503s into the kimi fallback and the entry becomes cosmetic again. Per-call kimi fallback (policy.py) still protects accuracy if Gemma has a transient failure.",
   "code": {
     "tier": "local",
     "model": "kimi-k2p7-code",
@@ -28,12 +28,10 @@
     "local_n_samples": 1
   },
   "sentiment": {
-    "tier": "local",
+    "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "sentiment_with_justification",
-    "local_prompt_template": "sentiment_local",
-    "timeout_s": 20
+    "prompt_template": "sentiment_with_justification"
   },
   "math": {
     "tier": "fireworks",
@@ -42,20 +40,16 @@
     "prompt_template": "math_direct"
   },
   "entity_extraction": {
-    "tier": "local",
+    "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "entity_typed",
-    "local_prompt_template": "entity_local",
-    "timeout_s": 30
+    "prompt_template": "entity_typed"
   },
   "summarization": {
-    "tier": "local",
+    "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "accurate_full",
-    "local_prompt_template": "summarize_exact",
-    "timeout_s": 40
+    "prompt_template": "accurate_full"
   },
   "logic": {
     "tier": "fireworks",
@@ -64,12 +58,9 @@
     "prompt_template": "logic_answer_last"
   },
   "_default": {
-    "tier": "local",
+    "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "accurate_full",
-    "local_prompt_template": "knowledge_local",
-    "local_n_samples": 2,
-    "timeout_s": 45
+    "prompt_template": "accurate_full"
   }
 }
