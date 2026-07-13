@@ -26,3 +26,17 @@ frontier.csv
 .env
 .env.*
 !.env.example
+
+# Local-tier ship-set (D44): large binary/model assets staged into the image,
+# not source -- docker/entrypoint.sh IS tracked, these are not. Re-fetched by
+# whatever staging step populates them (see DECISIONS.md D44), never
+# committed; local_assets/ is the raw-download scratch dir behind them.
+docker/llama/
+docker/models/
+local_assets/
+*.gguf
+
+# Large binaries that have no business in git history (D39: two of these
+# were committed by accident and flagged for cleanup)
+*.tar
+*.tar.gz

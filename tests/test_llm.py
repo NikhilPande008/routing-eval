@@ -33,6 +33,24 @@ def test_remote_runner_reports_usage_and_minimal_call():
     assert call["extra"] == {"reasoning_effort": "none"}      # billed reasoning suppressed
 
 
+def test_remote_and_local_runner_default_max_tokens_is_512_not_32():
+    """D40: the 32-token default was a token-minimization leftover that
+    silently truncates multi-sentence answers -- a guaranteed judge failure
+    (D18). 512 is a generous cap; truncation is the risk now, not tokens."""
+    assert RemoteRunner(StubClient(stub_response(["x"])), "m").max_tokens == 512
+    assert LocalRunner(StubClient(stub_response(["x"])), "m").max_tokens == 512
+
+
+def test_remote_runner_reports_finish_reason():
+    client = StubClient(stub_response(contents=["a truncated ans"], finish_reason="length"))
+    out = RemoteRunner(client, "remote").run(ITEM)
+    assert out.finish_reason == "length"
+
+    client_ok = StubClient(stub_response(contents=["4"]))
+    out_ok = RemoteRunner(client_ok, "remote").run(ITEM)
+    assert out_ok.finish_reason == "stop"
+
+
 class _FakeResp:
     def __init__(self, body):
         self._b = body.encode()

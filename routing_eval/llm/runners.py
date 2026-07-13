@@ -1,10 +1,17 @@
 """Local (vLLM) and remote (Fireworks) runners. Each turns an Item into a
 structured output the gates and the record-builder consume.
 
-Token-minimization levers on the remote call (billed): tight max_tokens, stop
-sequences, temperature 0, reasoning_effort='none' (reasoning tokens are billed).
-The exact answer cap and stop sequences are tuned to the revealed scorer's answer
-format at kickoff.
+2026-07-10 (D40): `max_tokens` defaults raised 32 -> 512. The 32-token default
+was a token-minimization leftover from before the accuracy gate existed; a
+32-token cap silently truncates any multi-sentence explanation, which is a
+guaranteed judge failure (D18: the gate is an LLM judge grading intent, not a
+token-count optimizer) -- token headroom is not the binding constraint right
+now (the leaderboard leader spends ~225 tokens/task; D33's baseline spends
+~95), truncation is. `RemoteRunner` also now records `finish_reason` on every
+call so a truncated (`finish_reason="length"`) answer can be detected and
+retried with a doubled cap -- see `policy.py`'s `_try_fireworks`.
+temperature=0, reasoning_effort='none' (reasoning tokens are billed) are kept
+-- those don't trade off against answer completeness the way max_tokens does.
 """
 from __future__ import annotations
 
@@ -50,6 +57,7 @@ class RemoteOutput:
     completion_tokens: int
     total_tokens: int
     token_logprobs: List[float]
+    finish_reason: Optional[str] = None   # "length" means the answer was truncated
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -58,22 +66,34 @@ class LocalRunner:
     so the self-consistency gate has variation; the logprob gate reads choice 0.
     Local tokens are free here, so running local more than once is fine."""
 
-    def __init__(self, client, model: str, max_tokens: int = 32, temperature: float = 0.0,
+    def __init__(self, client, model: str, max_tokens: int = 512, temperature: float = 0.0,
                  stop: Optional[List[str]] = None, n_samples: int = 1,
-                 system: Optional[str] = None):
+                 system: Optional[str] = None, logprobs: bool = True):
         self.client, self.model = client, model
         self.max_tokens, self.temperature = max_tokens, temperature
         self.stop, self.n_samples, self.system = stop, n_samples, system
+        self.logprobs = logprobs   # gates need them; the deployed score path doesn't
 
-    def run(self, item: Item, timeout: Optional[float] = None) -> LocalOutput:
+    def run(self, item: Item, timeout: Optional[float] = None,
+            system: Optional[str] = None,
+            temperature: Optional[float] = None) -> LocalOutput:
         """`timeout` (seconds) forwards to the client's own socket timeout --
         real protection against a wedged local server. routing_eval.policy
         additionally bounds this call in a thread for clients (like tests'
-        StubClient) that don't do real I/O and so can't honor it themselves."""
+        StubClient) that don't do real I/O and so can't honor it themselves.
+
+        `system` (2026-07-11, local tier) overrides the constructor-level
+        system prompt per call -- the policy router passes each entry's
+        template here so one LocalRunner serves every local category. None
+        keeps the constructor value (which itself defaults to the runner-level
+        DEFAULT_SYSTEM via build_messages)."""
         resp = self.client.chat(
-            model=self.model, messages=build_messages(item, self.system),
-            max_tokens=self.max_tokens, temperature=self.temperature, stop=self.stop,
-            n=self.n_samples, logprobs=True, timeout=timeout)
+            model=self.model, messages=build_messages(item, system if system is not None
+                                                      else self.system),
+            max_tokens=self.max_tokens,
+            temperature=self.temperature if temperature is None else temperature,
+            stop=self.stop,
+            n=self.n_samples, logprobs=self.logprobs, timeout=timeout)
         choices = resp["choices"]
         usage = resp.get("usage") or {}
         return LocalOutput(
@@ -87,7 +107,7 @@ class LocalRunner:
 class RemoteRunner:
     """Fireworks remote model, tuned for minimum billed tokens."""
 
-    def __init__(self, client, model: str, max_tokens: int = 32,
+    def __init__(self, client, model: str, max_tokens: int = 512,
                  stop: Optional[List[str]] = None, reasoning_effort: Optional[str] = "none",
                  system: Optional[str] = None, logprobs: bool = False):
         self.client, self.model = client, model
@@ -112,4 +132,5 @@ class RemoteRunner:
         return RemoteOutput(
             answer=_content(choice), prompt_tokens=pt, completion_tokens=ct,
             total_tokens=usage.get("total_tokens", pt + ct),
-            token_logprobs=_token_logprobs(choice), raw=resp)
+            token_logprobs=_token_logprobs(choice),
+            finish_reason=choice.get("finish_reason"), raw=resp)

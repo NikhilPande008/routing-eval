@@ -103,8 +103,15 @@ def run(input_path: str = DEFAULT_INPUT, output_path: str = DEFAULT_OUTPUT,
     if local is None:
         local_base_url = os.environ.get("LOCAL_BASE_URL")
         if local_base_url:
+            # logprobs=False: the score path never reads them, and not asking
+            # keeps the llama-server request minimal (gates, which do need
+            # logprobs, build their own LocalRunner). LOCAL_MAX_TOKENS (D48
+            # redesign): caps local generations so a runaway answer can't eat
+            # the per-request timeout; the entrypoint exports 128.
             local = LocalRunner(OpenAICompatibleClient(local_base_url),
-                                model=os.environ.get("LOCAL_MODEL", "local-model"))
+                                model=os.environ.get("LOCAL_MODEL", "local-model"),
+                                max_tokens=int(os.environ.get("LOCAL_MAX_TOKENS", "512")),
+                                logprobs=False)
 
     if low_confidence_threshold is None:
         low_confidence_threshold = _env_float("ROUTING_LOW_CONFIDENCE_THRESHOLD",
@@ -112,11 +119,17 @@ def run(input_path: str = DEFAULT_INPUT, output_path: str = DEFAULT_OUTPUT,
     if default_timeout_s is None:
         default_timeout_s = _env_float("ROUTING_TIMEOUT_S", DEFAULT_TIMEOUT_S)
 
+    # D52/D54: the batch-level local time budget (PolicyRouter.local_budget_s).
+    # 330s: tightened from 380 after D54's retry loop pushed the emulated
+    # 19-task worst case to 406s wall -- 330 + model load + the full remote
+    # sweep stays under ~520s of the 600s total (D19) even worst-case.
+    local_budget_s = _env_float("ROUTING_LOCAL_BUDGET_S", 330.0) if local else None
+
     router = PolicyRouter(
         policy=load_policy(policy_path or DEFAULT_POLICY_PATH),
         remote_client=client, allowed_models=allowed_models, classifier=classifier,
         local=local, low_confidence_threshold=low_confidence_threshold,
-        default_timeout_s=default_timeout_s)
+        default_timeout_s=default_timeout_s, local_budget_s=local_budget_s)
 
     results = router.route_all(tasks)
 

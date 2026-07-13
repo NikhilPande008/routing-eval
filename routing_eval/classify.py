@@ -204,17 +204,134 @@ def is_sentiment_task(prompt: str) -> bool:
 
 
 class TwoWayClassifier:
-    """The deployed classifier (D37): only detects the two things that
+    """The D37 classifier: only detects the two things that
     change which prompt template gets used -- code and sentiment. Everything
     else is "general", which resolves through policy.py's "_default" entry
     (the generic template) exactly like an unmatched category always has.
     Confidence is always 1.0 -- these are deterministic yes/no detectors,
     not a margin-based guess, so there's no partial-confidence state to
-    report; "general" is a deliberate default, not an uncertain one."""
+    report; "general" is a deliberate default, not an uncertain one.
+    Superseded as PolicyRouter's default by TieredClassifier (D41) once the
+    accuracy gate cleared and the objective flipped back to tokens -- kept
+    because its two detectors are still the first two tiers of the new one."""
 
     def classify(self, prompt: str) -> ClassificationResult:
         if is_code_task(prompt):
             return ClassificationResult("code", 1.0, {"code": 1})
         if is_sentiment_task(prompt):
             return ClassificationResult("sentiment", 1.0, {"sentiment": 1})
+        return ClassificationResult("general", 1.0, {})
+
+
+# ---------------------------------------------------------------------------
+# D41: three more narrow detectors -- entity extraction, math, logic -- so
+# those categories can use minimal (cheap) templates now that the accuracy
+# gate is cleared and ranking is pure tokens. Same design rule as D37:
+# phrase-level signals, never a lone generic word. The failure asymmetry is
+# what makes this safe to deploy: a MISSED detection falls through to
+# "_default" (the fuller template -- costs tokens, never accuracy); only a
+# FALSE POSITIVE can hurt accuracy (a knowledge/summarization task quietly
+# getting a terse template), so these are tuned for zero false positives on
+# all three fixtures and verified by scripts/tiered_classifier_check.py.
+# ---------------------------------------------------------------------------
+
+# Entity extraction: explicit ask for entities / proper nouns / who-and-where.
+_ENTITY_RE = re.compile(
+    r"\bnamed entit"
+    r"|\bentit(?:y|ies)\b"
+    r"|\bproper nouns\b"
+    r"|people,\s+places"
+    r"|\bwho and where\b"
+    r"|\b(?:person|people|names)\b[^.?]{0,40}\b(?:compan|organi[sz]ation|place)",
+    re.IGNORECASE,
+)
+
+# Math: a computational question phrase AND at least two numbers. The phrase
+# alone is not enough ("how many books did Orwell write" is knowledge); the
+# numbers alone are not enough ("summarize: the $4.1B merger fell to $3.6B"
+# is summarization -- exactly the false positive the phrase requirement
+# blocks, verified against the fixtures).
+_MATH_QUESTION_RE = re.compile(
+    r"\bhow (?:many|much|long|far|old)\b"
+    r"|\bcalculate\b|\bcompute\b|\bconvert\b"
+    r"|\bdetermine the (?:volume|total|number|amount|area|cost|price|speed|distance|time)\b"
+    r"|\bwhat (?:is|was|'s) (?:its|the|a) (?:total|final|average|area|sum|difference"
+    r"|remainder|volume|speed|cost|price)"
+    r"|\bwhat (?:quantity|amount|number|fraction|percentage)\b",
+    re.IGNORECASE,
+)
+_NUMBER_RE = re.compile(r"\d[\d,.]*")
+
+# Logic puzzles: constraint-deduction phrasing. Each alternative is a shape
+# that essentially only puzzle statements use.
+_LOGIC_RE = re.compile(
+    r"\bwho owns\b"
+    r"|\bwho (?:finished|came) (?:first|last|second|third)\b"
+    r"|\bwho is lying\b"
+    r"|\bseating order\b|\bin what order\b|\bwhat is the .{0,20}order\b"
+    r"|\bwhich box\b"
+    r"|\bwhat position\b"
+    r"|\beach\b[^.?]{0,60}\bdifferent\b"
+    r"|\blabels? (?:are|is) (?:all )?wrong\b",
+    re.IGNORECASE,
+)
+
+
+def is_entity_extraction_task(prompt: str) -> bool:
+    return bool(_ENTITY_RE.search(prompt))
+
+
+# Summarization (2026-07-11, local tier): explicit summarize/summary/TL;DR
+# phrasing only. This detector gates a LOCAL-model route, so a false positive
+# is an ACCURACY risk (a weak model answers a non-summarization task), not
+# just a template mismatch -- stricter precision bar than the token-tier
+# detectors above. Deliberately excluded: "in your own words" / "shorten"
+# alone ("explain X in your own words" is knowledge), bare "summary" (legal
+# "summary judgment", "executive summary" as a noun in knowledge questions).
+_SUMMARIZATION_RE = re.compile(
+    r"\bsummari[sz]e\b|\bsummari[sz]ing\b"
+    r"|\btl;?dr\b"
+    r"|\b(?:give|provide|write|create|produce)\b[^.?!]{0,40}\bsummary\b"
+    r"|\bcondense\b[^.?!]{0,40}\b(?:text|passage|paragraph|article|review|report|into)\b",
+    re.IGNORECASE,
+)
+
+
+def is_summarization_task(prompt: str) -> bool:
+    return bool(_SUMMARIZATION_RE.search(prompt))
+
+
+def is_math_task(prompt: str) -> bool:
+    return bool(_MATH_QUESTION_RE.search(prompt)) and len(_NUMBER_RE.findall(prompt)) >= 2
+
+
+def is_logic_task(prompt: str) -> bool:
+    return bool(_LOGIC_RE.search(prompt))
+
+
+class TieredClassifier:
+    """The deployed classifier (D41): D37's code/sentiment detectors first
+    (they gate FORMAT-critical templates, highest stakes), then the three
+    token-tier detectors (entity/math/logic -> minimal templates), else
+    "general" -> "_default" (the fuller template -- the safe, merely more
+    expensive fallback). Entity is checked before math on purpose: entity
+    prompts routinely contain numbers-plus-question shapes ("11,000 square
+    kilometers ... in 2023") that could otherwise read as math."""
+
+    def classify(self, prompt: str) -> ClassificationResult:
+        if is_code_task(prompt):
+            return ClassificationResult("code", 1.0, {"code": 1})
+        if is_sentiment_task(prompt):
+            return ClassificationResult("sentiment", 1.0, {"sentiment": 1})
+        # Summarization before entity/math on purpose: an explicit "summarize
+        # this" instruction wins over question-shape signals inside the
+        # passage being summarized (numbers, who/where phrasing).
+        if is_summarization_task(prompt):
+            return ClassificationResult("summarization", 1.0, {"summarization": 1})
+        if is_entity_extraction_task(prompt):
+            return ClassificationResult("entity_extraction", 1.0, {"entity_extraction": 1})
+        if is_math_task(prompt):
+            return ClassificationResult("math", 1.0, {"math": 1})
+        if is_logic_task(prompt):
+            return ClassificationResult("logic", 1.0, {"logic": 1})
         return ClassificationResult("general", 1.0, {})

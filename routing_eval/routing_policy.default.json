@@ -1,32 +1,77 @@
 {
   "code": {
-    "tier": "fireworks",
+    "tier": "local",
     "model": "kimi-k2p7-code",
-    "max_tokens": 256,
-    "prompt_template": "code_only"
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
   },
   "code_debug": {
-    "tier": "fireworks",
+    "tier": "local",
     "model": "kimi-k2p7-code",
-    "max_tokens": 256,
-    "prompt_template": "code_only"
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
   },
   "code_gen": {
-    "tier": "fireworks",
+    "tier": "local",
     "model": "kimi-k2p7-code",
-    "max_tokens": 256,
-    "prompt_template": "code_only"
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
   },
   "sentiment": {
+    "tier": "local",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 512,
+    "prompt_template": "sentiment_with_justification",
+    "local_prompt_template": "sentiment_local",
+    "timeout_s": 20
+  },
+  "math": {
+    "tier": "local",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 512,
+    "prompt_template": "math_direct",
+    "local_prompt_template": "math_local",
+    "local_n_samples": 2,
+    "timeout_s": 60
+  },
+  "entity_extraction": {
+    "tier": "local",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 512,
+    "prompt_template": "entity_typed",
+    "local_prompt_template": "entity_local",
+    "timeout_s": 30
+  },
+  "summarization": {
+    "tier": "local",
+    "model": "kimi-k2p7-code",
+    "max_tokens": 512,
+    "prompt_template": "default",
+    "local_prompt_template": "summarize_exact",
+    "timeout_s": 40
+  },
+  "logic": {
     "tier": "fireworks",
     "model": "kimi-k2p7-code",
-    "max_tokens": 256,
-    "prompt_template": "sentiment_with_justification"
+    "max_tokens": 512,
+    "prompt_template": "logic_answer_last"
   },
   "_default": {
-    "tier": "fireworks",
+    "tier": "local",
     "model": "kimi-k2p7-code",
-    "max_tokens": 256,
-    "prompt_template": "default"
+    "max_tokens": 512,
+    "prompt_template": "default",
+    "local_prompt_template": "knowledge_local",
+    "local_n_samples": 2,
+    "timeout_s": 45
   }
 }

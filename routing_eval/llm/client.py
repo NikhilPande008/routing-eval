@@ -70,12 +70,15 @@ class StubClient:
 
 def stub_response(contents: List[str],
                   token_logprobs: Optional[List[List[float]]] = None,
-                  usage: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+                  usage: Optional[Dict[str, int]] = None,
+                  finish_reason: str = "stop") -> Dict[str, Any]:
     """Build an OpenAI-shaped response. `contents` is one string per choice;
-    `token_logprobs[i]` is the per-token logprob list for choice i."""
+    `token_logprobs[i]` is the per-token logprob list for choice i.
+    `finish_reason` defaults to "stop"; pass "length" to simulate a truncated
+    answer (see policy.py's retry-on-truncation logic, D40)."""
     choices = []
     for i, content in enumerate(contents):
-        choice: Dict[str, Any] = {"index": i, "finish_reason": "stop",
+        choice: Dict[str, Any] = {"index": i, "finish_reason": finish_reason,
                                   "message": {"role": "assistant", "content": content}}
         if token_logprobs is not None:
             choice["logprobs"] = {"content": [{"token": f"t{j}", "logprob": lp}

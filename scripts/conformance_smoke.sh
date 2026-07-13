@@ -65,8 +65,10 @@ echo "==> building $IMAGE (linux/amd64)"
 docker buildx build --platform linux/amd64 -t "$IMAGE" --load .
 
 echo "==> running the scoring entrypoint (routing-eval score)"
+# DOCKER_RUN_FLAGS: extra docker-run flags, e.g. "--cpus 2 --memory 4g" to
+# simulate the grading VM (D19). Empty by default.
 START_S=$(date +%s)
-docker run --rm \
+docker run --rm ${DOCKER_RUN_FLAGS:-} \
   -e FIREWORKS_BASE_URL="$RUN_BASE_URL" \
   -e FIREWORKS_API_KEY="$RUN_API_KEY" \
   -e ALLOWED_MODELS="$RUN_ALLOWED_MODELS" \
@@ -78,18 +80,40 @@ ELAPSED_S=$((END_S - START_S))
 echo "==> container ran for ${ELAPSED_S}s (budget: 600s total, D19)"
 
 echo "==> validating /output/results.json"
-REAL_FIREWORKS="$REAL_FIREWORKS" python3 -c "
+# LOCAL_TIER_IDS (D48 ladder, PLAN-TOKEN-OPT.md): the practice task IDs the
+# CURRENT rung routes to the bundled local model -- in stub mode these must
+# be answered by it (proving the in-container local tier end-to-end), all
+# others must reach the stub. Grows one ID per rung:
+#   D48: practice-03 (sentiment)   D49: +practice-05 (entity)
+#   D50: +practice-04 (summarization)   D51: +practice-01 (general)
+#   D52: +practice-02 (math)   D53: +practice-07 (logic)
+LOCAL_TIER_IDS="${LOCAL_TIER_IDS:-practice-03}"
+# LOCAL_TIER_OPTIONAL_IDS: tasks whose local keep is NONDETERMINISTIC by
+# design (n>=2 self-consistency draws a temperature sample -- e.g. knowledge
+# tasks) -- accepted as either local or stub-answered.
+LOCAL_TIER_OPTIONAL_IDS="${LOCAL_TIER_OPTIONAL_IDS:-}"
+REAL_FIREWORKS="$REAL_FIREWORKS" LOCAL_TIER_IDS="$LOCAL_TIER_IDS" \
+LOCAL_TIER_OPTIONAL_IDS="$LOCAL_TIER_OPTIONAL_IDS" python3 -c "
 import json, os
 with open('$WORKDIR/output/results.json') as f:
     results = json.load(f)
 assert isinstance(results, list) and results, 'results.json must be a non-empty list'
+local_ids = set(filter(None, os.environ['LOCAL_TIER_IDS'].split(',')))
+either_ids = set(filter(None, os.environ['LOCAL_TIER_OPTIONAL_IDS'].split(',')))
 for r in results:
     assert set(r.keys()) == {'task_id', 'answer'}, f'bad shape: {r}'
     assert isinstance(r['task_id'], str) and r['task_id']
     if os.environ['REAL_FIREWORKS'] != '1':
-        assert r['answer'].startswith('stub-answer:'), f'answer did not reach the stub server: {r}'
+        if r['task_id'] in either_ids:
+            assert r['answer'].strip(), f'blank answer: {r}'
+        elif r['task_id'] in local_ids:
+            assert r['answer'].strip() and not r['answer'].startswith('stub-answer:'), (
+                f'local-tier task was NOT answered by the bundled model: {r}')
+        else:
+            assert r['answer'].startswith('stub-answer:'), f'answer did not reach the stub server: {r}'
 print(f'    {len(results)} results, shape OK' +
-      ('' if os.environ['REAL_FIREWORKS'] == '1' else ', all reached the stub server'))
+      ('' if os.environ['REAL_FIREWORKS'] == '1'
+       else f', remote tasks reached the stub + local-tier tasks ({sorted(local_ids)}) answered by the bundled model'))
 "
 
 if [ "$REAL_FIREWORKS" = "1" ]; then

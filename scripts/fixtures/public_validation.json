@@ -1,0 +1,68 @@
+{
+  "_meta": "RECONSTRUCTED from the official public-validation-set short descriptions (Judging FAQ v2, 10 retired tasks T01-T05). Prompts are shape-faithful reconstructions, NOT the official texts; golds/rubric fields are taken verbatim from the official shorts where given (math answers, NER entity list, format constraints). Passing helps; guarantees nothing.",
+  "tasks": [
+    {
+      "task_id": "T01",
+      "category": "factual_knowledge",
+      "prompt": "Name the three primary colors of the RGB color model used in digital displays, and explain why displays use RGB rather than the red-yellow-blue (RYB) model used in painting.",
+      "rubric": "ALL parts answered: the three colors (red, green, blue) AND an explanation of additive (light) vs subtractive (pigment) color mixing. Explanation of mechanism required, not just the fact."
+    },
+    {
+      "task_id": "T01b",
+      "category": "factual_knowledge",
+      "prompt": "What is the difference between machine learning and deep learning? Briefly explain how each works.",
+      "rubric": "Both parts: the difference AND how each works (ML: learns patterns from data/features; DL: multi-layer neural networks learning representations)."
+    },
+    {
+      "task_id": "T01c",
+      "category": "factual_knowledge",
+      "prompt": "What is the difference between RAM and ROM in a computer, and what is each used for?",
+      "rubric": "Both parts: the difference (volatile working memory vs non-volatile permanent storage) AND the use of each."
+    },
+    {
+      "task_id": "T02",
+      "category": "mathematical_reasoning",
+      "prompt": "A warehouse starts with 2,400 units in stock. It ships out 37% of its inventory, then receives a delivery of 800 units, and finally ships out another 640 units. How many units remain in the warehouse?",
+      "gold": "1672",
+      "rubric": "Exact final answer 1,672 required. Working shown or implied is enough."
+    },
+    {
+      "task_id": "T02b",
+      "category": "mathematical_reasoning",
+      "prompt": "A recipe for 8 servings calls for 1.25 cups of sugar. How much sugar is needed for 12 servings? And if sugar costs $2.40 per cup, how much will the sugar for the 12 servings cost?",
+      "gold": "1.875 cups; $4.50",
+      "rubric": "BOTH parts required: 1.875 cups AND $4.50. Multi-part = every part correct."
+    },
+    {
+      "task_id": "T03",
+      "category": "sentiment_classification",
+      "prompt": "What is the sentiment of this review? 'The delivery took almost three weeks and the box arrived damaged, but the product itself is fantastic and customer support was incredibly helpful when I reached out.'",
+      "rubric": "Label LENIENT (Mixed/Neutral/Positive accepted; Negative = FAIL). Justification MUST acknowledge BOTH the delivery problems and the product/support praise."
+    },
+    {
+      "task_id": "T03b",
+      "category": "sentiment_classification",
+      "prompt": "Classify the sentiment of this tweet: 'Box came dented and the manual was missing, but the device itself works flawlessly.'",
+      "rubric": "Label LENIENT (Mixed/Neutral/Positive accepted; Negative = FAIL). Justification MUST acknowledge BOTH the packaging issues and the device praise."
+    },
+    {
+      "task_id": "T04",
+      "category": "text_summarization",
+      "prompt": "Summarize the following passage in exactly two sentences: Machine learning is transforming healthcare by enabling earlier disease detection, personalized treatment plans, and more efficient hospital operations. Algorithms trained on medical imaging can now identify certain cancers with accuracy rivaling experienced radiologists. However, the technology faces serious challenges: patient data privacy concerns, the risk of algorithmic bias against underrepresented groups, and the difficulty of integrating new tools into existing clinical workflows. Regulators and hospitals are still working out how to validate these systems before they can be trusted with life-and-death decisions.",
+      "rubric": "HARD: exactly 2 sentences. Content must cover BOTH the opportunity (detection/treatment gains) and the challenges (privacy/bias/integration)."
+    },
+    {
+      "task_id": "T04b",
+      "category": "text_summarization",
+      "prompt": "Summarize the following passage in exactly 3 bullets, each no more than 15 words: Remote work has reshaped the modern workplace. Employees report higher satisfaction, save hours of commuting time each week, and often show measurable productivity gains on focused tasks. Companies save on office space and can hire from a global talent pool. At the same time, remote workers frequently struggle with isolation and blurred work-life boundaries, and managers find it harder to build team culture and onboard new hires effectively. Many organizations are settling on hybrid models as a compromise.",
+      "rubric": "HARD: exactly 3 bullets, each <=15 words. Content must cover BOTH benefits and drawbacks."
+    },
+    {
+      "task_id": "T05",
+      "category": "named_entity_recognition",
+      "prompt": "Extract all named entities and their types from the following sentence: 'Sundar Pichai announced that Google will open a new research office in Zurich after meeting with scientists at ETH Zurich on March 15, 2023.'",
+      "gold": "Sundar Pichai -- PERSON; Google -- ORGANIZATION; Zurich -- LOCATION; ETH Zurich -- ORGANIZATION; March 15, 2023 -- DATE",
+      "rubric": "All FIVE entities required (missing any = fail). Labels PERSON/ORGANIZATION/LOCATION/DATE. One mislabel tolerated; two+ = fail."
+    }
+  ]
+}

@@ -17,12 +17,12 @@
   {"category": "sentiment", "prompt": "Judging by this line, was the experience good or bad for them: 'Would not go back if you paid me.'"},
   {"category": "sentiment", "prompt": "This is a snippet from a survey response -- happy customer or unhappy one? 'Everything about the checkout process just clicked.'"},
 
-  {"category": "general", "prompt": "What's the boiling point of water at sea level, in Celsius?"},
-  {"category": "general", "prompt": "A cyclist rides 20 km at 10 km/h then rests, then rides another 15 km at 5 km/h. How long was the cyclist actually moving?"},
-  {"category": "general", "prompt": "Two suspects, Ray and Vic, gave alibis. Ray says he was with Vic. Vic says he was alone. Only one of them is lying. Who is lying?"},
-  {"category": "general", "prompt": "Condense the following into one line: after three rounds of funding, the startup raised $40 million total and used it to expand into two new markets."},
-  {"category": "general", "prompt": "Name every person and company mentioned here: Priya Rao met with executives from Delta Airlines in Atlanta on a Tuesday."},
-  {"category": "general", "prompt": "A loyalty program gives customers 2 points per dollar, doubled on weekends. How many points does a $30 weekend purchase earn?"},
-  {"category": "general", "prompt": "The area code for this city changed last year -- what's the postal code region called in the UK equivalent system?"},
-  {"category": "general", "prompt": "What training program did the astronaut corps use before the first shuttle launch?"}
+  {"category": "knowledge", "prompt": "What's the boiling point of water at sea level, in Celsius?"},
+  {"category": "math", "prompt": "A cyclist rides 20 km at 10 km/h then rests, then rides another 15 km at 5 km/h. How long was the cyclist actually moving?"},
+  {"category": "logic", "prompt": "Two suspects, Ray and Vic, gave alibis. Ray says he was with Vic. Vic says he was alone. Only one of them is lying. Who is lying?"},
+  {"category": "summarization", "prompt": "Condense the following into one line: after three rounds of funding, the startup raised $40 million total and used it to expand into two new markets."},
+  {"category": "entity_extraction", "prompt": "Name every person and company mentioned here: Priya Rao met with executives from Delta Airlines in Atlanta on a Tuesday."},
+  {"category": "math", "prompt": "A loyalty program gives customers 2 points per dollar, doubled on weekends. How many points does a $30 weekend purchase earn?"},
+  {"category": "knowledge", "prompt": "The area code for this city changed last year -- what's the postal code region called in the UK equivalent system?"},
+  {"category": "knowledge", "prompt": "What training program did the astronaut corps use before the first shuttle launch?"}
 ]

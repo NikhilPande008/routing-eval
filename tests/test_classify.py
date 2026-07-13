@@ -1,7 +1,7 @@
 import json
 
-from routing_eval.classify import (DEFAULT_KEYWORDS, KeywordClassifier, TwoWayClassifier,
-                                   is_code_task, is_sentiment_task)
+from routing_eval.classify import (DEFAULT_KEYWORDS, KeywordClassifier, TieredClassifier,
+                                   TwoWayClassifier, is_code_task, is_sentiment_task)
 from routing_eval.taskio import load_tasks, task_prompt
 
 PRACTICE_TASKS_PATH = "scripts/fixtures/practice_tasks.json"
@@ -147,6 +147,90 @@ def test_two_way_classifier_zero_false_positives_or_negatives_on_paraphrases():
             assert category == "sentiment", f"{c['prompt']!r} detected {category!r}"
         else:
             assert category == "general", f"{c['prompt']!r} unexpectedly detected as {category!r}"
+
+
+# ---------------------------------------------------------------------------
+# D41: TieredClassifier -- the token-tier detectors added once the accuracy
+# gate cleared. Zero-dangerous-false-positive property is the shippable bar:
+# a missed detection falls to "general" (fuller template, token cost only);
+# a wrong-specific-category detection is the only accuracy risk.
+# See scripts/tiered_classifier_check.py for the full three-fixture report.
+# ---------------------------------------------------------------------------
+
+def test_math_detector_needs_numbers_and_a_computational_question():
+    from routing_eval.classify import is_math_task
+    assert is_math_task("A store has 240 items. It sells 15% on Monday and 60 more "
+                        "on Tuesday. How many items remain?")
+    assert is_math_task("If a train travels at 80 km/h for 2.5 hours, then at 60 km/h "
+                        "for 1.5 hours, what is its average speed for the entire trip?")
+    # numbers WITHOUT a computational question phrase: summarization, not math
+    assert not is_math_task("Summarize in one sentence: The merger, originally valued at "
+                           "$4.1 billion, was renegotiated down to $3.6 billion.")
+    # computational-sounding phrase WITHOUT two numbers: knowledge, not math
+    assert not is_math_task("Who wrote the novel '1984', and in what year was it first published?")
+
+
+def test_entity_detector_fires_on_extraction_asks_only():
+    from routing_eval.classify import is_entity_extraction_task
+    assert is_entity_extraction_task("Extract all named entities and their types from: "
+                                     "Maria Sanchez joined Fireworks AI in Berlin last March.")
+    assert is_entity_extraction_task("List the people, places, and organizations mentioned in: "
+                                     "Dr. Amara Okafor presented at Stanford last November.")
+    assert not is_entity_extraction_task("What is the capital of Australia, and what body of "
+                                        "water is it near?")
+
+
+def test_logic_detector_fires_on_constraint_puzzles_only():
+    from routing_eval.classify import is_logic_task
+    assert is_logic_task("Three friends, Sam, Jo, and Lee, each own a different pet: cat, "
+                        "dog, bird. Sam does not own the bird. Jo owns the dog. Who owns the cat?")
+    assert is_logic_task("Three boxes are labeled 'Apples', 'Oranges', and 'Mixed', but all "
+                        "three labels are wrong. What does the box labeled 'Mixed' contain?")
+    assert not is_logic_task("Who painted the Mona Lisa?")
+    assert not is_logic_task("Summarize this in one sentence: the two nations signed a "
+                            "trade agreement lowering tariffs next year.")
+
+
+def test_tiered_classifier_zero_dangerous_false_positives_on_all_fixtures():
+    """The shippable bar for D41: across all three fixtures, no task may be
+    detected into a WRONG specific category (that's the direction that
+    swaps a fuller template for a terse one and risks the judge). Falling
+    to 'general' is always acceptable -- it only costs tokens."""
+    expected = {
+        "code_debug": "code", "code_gen": "code", "code": "code",
+        "sentiment": "sentiment", "entity_extraction": "entity_extraction",
+        "math": "math", "logic": "logic",
+        "knowledge": "general", "summarization": "summarization",   # own detector since 2026-07-11
+        "wordplay": "general",
+    }
+    acceptable_alternate = {"logic": {"math"}}   # arithmetic puzzles in logic clothing
+    clf = TieredClassifier()
+    for path in (ACCURACY_DIAGNOSTIC_PATH, PARAPHRASES_PATH,
+                 "scripts/fixtures/two_way_stress_test.json"):
+        for c in _load_fixture(path):
+            got = clf.classify(c["prompt"]).category
+            want = expected[c["category"]]
+            ok = (got == want or got == "general"
+                  or got in acceptable_alternate.get(c["category"], set()))
+            assert ok, (f"DANGEROUS misdetection: {c['prompt'][:80]!r} "
+                        f"true={c['category']!r} detected={got!r}")
+
+
+def test_tiered_classifier_routes_the_8_practice_tasks_to_their_tiers():
+    expected = {
+        "practice-01": "general",            # knowledge -> fuller default
+        "practice-02": "math",
+        "practice-03": "sentiment",
+        "practice-04": "summarization",      # own (local-tier) detector since 2026-07-11
+        "practice-05": "entity_extraction",
+        "practice-06": "code",
+        "practice-07": "logic",
+        "practice-08": "code",
+    }
+    tasks = load_tasks(PRACTICE_TASKS_PATH)
+    clf = TieredClassifier()
+    for i, t in enumerate(tasks):
+        assert clf.classify(task_prompt(t, i)).category == expected[t["task_id"]], t["task_id"]
 
 
 def test_two_way_classifier_leaves_8_practice_tasks_routing_unchanged():

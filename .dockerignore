@@ -1,5 +1,11 @@
-# Keep the build context tiny and the image clean. The Dockerfile only copies
-# pyproject.toml, README.md, and routing_eval/ -- everything else is excluded.
+# Keep the build context tiny and the image clean. The Dockerfile copies
+# pyproject.toml, README.md, routing_eval/, and docker/ (the D48-ladder
+# local-tier ship-set: llama.cpp binaries + the 1.5B GGUF) -- everything
+# else is excluded. local_assets/ holds raw downloads; only the staged
+# docker/ copy ships.
+local_assets/
+*.tar
+*.tar.gz
 .git/
 .gitignore
 __pycache__/

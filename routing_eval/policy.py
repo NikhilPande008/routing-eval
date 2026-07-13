@@ -42,6 +42,31 @@ below keeps "code_debug"/"code_gen" as separate entries (identical to
 "code") purely so KeywordClassifier-based tooling (bakeoff/generate-policy,
 still calibrated against the 8-way taxonomy) keeps resolving correctly;
 nothing currently classifies into those two names in the deployed path.
+
+2026-07-10 (D41, gate cleared 89.5% -- objective is now tokens, under a
+one-task accuracy margin): PolicyRouter's default classifier is now
+TieredClassifier (classify.py) -- D37's code/sentiment detectors plus three
+new high-precision detectors (entity_extraction / math / logic) that route
+to minimal templates. The failure asymmetry that makes this safe: a missed
+detection falls through to "_default" (fuller template -- costs tokens,
+never accuracy); the detectors are tuned for zero false positives so no
+knowledge/summarization task is quietly terse-ified. Every template trim was
+judge-proxy-gated before shipping (D8).
+
+2026-07-10 (D40): two independent truncation-eliminating changes, both
+accuracy-only. (1) Every `max_tokens` here (PolicyEntry's default, the
+checked-in routing_policy.default.json, generate_policy()'s default) moved
+256 -> 512 -- a 256-token cap can still truncate a 2-5 sentence explanation
+plus a reasoning trace, the exact shape the new "default" template
+(prompts.ACCURATE_GENERIC_SYSTEM) now asks for. (2) `_try_fireworks` now
+reads and logs `finish_reason` on every call and, if a call comes back
+`finish_reason="length"` (truncated), retries ONCE, same model, with a
+doubled cap -- a truncated answer is a guaranteed judge failure (D18), so
+catching it is worth one extra call. This is orthogonal to and composes
+with D31's existing retry-on-blank-with-a-different-model: a length-retry
+happens first, inside one model's attempts; if THAT still comes back blank
+or truncated-again, the outer blank-check in route_task still swaps models
+as before.
 """
 from __future__ import annotations
 
@@ -50,14 +75,17 @@ import json
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from .classify import Classifier, TwoWayClassifier
+from .classify import Classifier, TieredClassifier
 from .llm.runners import LocalRunner, RemoteRunner
+from .localcheck import agreement_problem, local_answer_problem
 from .modelids import normalize_model_id
 from .modelselect import LocalViability, ModelCategoryRanking
-from .prompts import CODE_ONLY_SYSTEM, PROMPT_TEMPLATES, SENTIMENT_SYSTEM  # noqa: F401 (re-exported)
+from .prompts import CODE_ONLY_SYSTEM, DIVERSITY_PROMPT_TEMPLATES  # noqa: F401 (re-exported)
+from .prompts import PROMPT_TEMPLATES, SENTIMENT_SYSTEM  # noqa: F401 (re-exported)
 from .prompts import system_prompt as _system_prompt
 from .schema import Item
 from .taskio import task_id as _task_id
@@ -90,21 +118,43 @@ def _is_blank(answer: str) -> bool:
 
 
 @dataclass
+class FireworksAttempt:
+    """One `_try_fireworks` call's result -- `answer` is what route_task's
+    external `{task_id, answer}` contract needs; `finish_reason`/`total_tokens`
+    are for logging and diagnostics (D40), not part of that contract."""
+    answer: str
+    finish_reason: Optional[str] = None
+    total_tokens: int = 0
+
+
+@dataclass
 class PolicyEntry:
     tier: str                              # "local" | "fireworks"
     model: Optional[str] = None            # None on "fireworks" => first ALLOWED_MODELS at runtime
-    max_tokens: int = 256
+    max_tokens: int = 512                  # D40: 256 truncated multi-sentence answers; 512 is generous
     prompt_template: str = "default"
     timeout_s: Optional[float] = None      # None => caller's default_timeout_s (D19 budget)
+    # 2026-07-11 (local tier): template for the LOCAL call only, when it should
+    # differ from the remote one. None => prompt_template for both. This keeps
+    # the Fireworks ESCALATION path byte-identical to the live-validated remote
+    # treatment while the local call gets a prompt written for the small model.
+    local_prompt_template: Optional[str] = None
+    # 2026-07-12 (D52): 2 => draw a second local sample (temperature 0.7) and
+    # require agreement (localcheck.agreement_problem) before keeping -- the
+    # content fence for categories whose validators can't check facts or
+    # arithmetic (knowledge, math). 1 => single sample, validator-only.
+    local_n_samples: int = 1
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "PolicyEntry":
-        return cls(tier=d["tier"], model=d.get("model"), max_tokens=int(d.get("max_tokens", 256)),
+        return cls(tier=d["tier"], model=d.get("model"), max_tokens=int(d.get("max_tokens", 512)),
                    prompt_template=d.get("prompt_template", "default"),
-                   timeout_s=d.get("timeout_s"))
+                   timeout_s=d.get("timeout_s"),
+                   local_prompt_template=d.get("local_prompt_template"),
+                   local_n_samples=int(d.get("local_n_samples", 1)))
 
 
-SAFE_FALLBACK_ENTRY = PolicyEntry(tier="fireworks", model=None, max_tokens=256,
+SAFE_FALLBACK_ENTRY = PolicyEntry(tier="fireworks", model=None, max_tokens=512,
                                   prompt_template="default", timeout_s=None)
 
 
@@ -149,14 +199,24 @@ class PolicyRouter:
                 allowed_models: List[str], classifier: Optional[Classifier] = None,
                 local: Optional[LocalRunner] = None,
                 low_confidence_threshold: float = DEFAULT_LOW_CONFIDENCE_THRESHOLD,
-                default_timeout_s: float = DEFAULT_TIMEOUT_S):
+                default_timeout_s: float = DEFAULT_TIMEOUT_S,
+                local_budget_s: Optional[float] = None):
         self.policy = policy
         self.remote_client = remote_client
         self.allowed_models = allowed_models
-        self.classifier = classifier or TwoWayClassifier()
+        self.classifier = classifier or TieredClassifier()
         self.local = local
         self.low_confidence_threshold = low_confidence_threshold
         self.default_timeout_s = default_timeout_s
+        # D52 global time governor: total wall-clock all local attempts may
+        # consume across the batch. Replaces reliance on tight per-task
+        # timeouts (which slow grading hardware turned into always-escalate):
+        # per-task caps can now be generous because the BATCH-level spend is
+        # bounded here -- once the budget is gone, every remaining local-tier
+        # task goes straight to Fireworks (the proven remote path). None =>
+        # unlimited (test/back-compat behavior).
+        self.local_budget_s = local_budget_s
+        self._local_spent_s = 0.0
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2) if local else None
 
     def close(self) -> None:
@@ -174,29 +234,45 @@ class PolicyRouter:
                 return m
         return None
 
-    def _try_fireworks(self, entry: PolicyEntry, item: Item, model: str) -> str:
+    def _try_fireworks(self, entry: PolicyEntry, item: Item, model: str,
+                       max_tokens: Optional[int] = None) -> FireworksAttempt:
         """One attempt against a specific model. Never raises -- any failure
-        (exception or a blank response) returns "" so the caller can retry
-        with a different model uniformly regardless of cause. `timeout` is
-        D19's per-request budget (30s default), so two attempts (primary +
-        retry) still fit well inside the 10-minute total even in the worst
-        case where every task needs a retry."""
+        (exception or a blank response) returns an empty FireworksAttempt so
+        the caller can retry with a different model uniformly regardless of
+        cause. `timeout` is D19's per-request budget (30s default), so two
+        attempts (primary + retry) still fit well inside the 10-minute total
+        even in the worst case where every task needs a retry.
+
+        D40: `finish_reason` is logged on every call. `max_tokens=None` means
+        "first attempt at this model" -- if that attempt comes back
+        `finish_reason="length"` (truncated), this retries ONCE, same model,
+        with a doubled cap (`max_tokens` passed explicitly on the recursive
+        call, which is what stops it from ever doubling more than once). A
+        truncated answer is a guaranteed judge failure (D18), so this is
+        cheap insurance -- at most one extra call, only when actually needed."""
         system = _system_prompt(entry.prompt_template)
         timeout_s = entry.timeout_s or self.default_timeout_s
+        tokens_cap = max_tokens or entry.max_tokens
         try:
-            remote = RemoteRunner(self.remote_client, model=model, max_tokens=entry.max_tokens,
+            remote = RemoteRunner(self.remote_client, model=model, max_tokens=tokens_cap,
                                   system=system)
             out = remote.run(item, timeout=timeout_s)
             print(f"policy: task {item.id} answered by {model} -- "
                  f"prompt={out.prompt_tokens} completion={out.completion_tokens} "
-                 f"total={out.total_tokens} tokens", file=sys.stderr)
+                 f"total={out.total_tokens} tokens finish_reason={out.finish_reason!r} "
+                 f"max_tokens={tokens_cap}", file=sys.stderr)
+            if out.finish_reason == "length" and max_tokens is None:
+                doubled = tokens_cap * 2
+                print(f"policy: task {item.id} answer TRUNCATED at max_tokens={tokens_cap} "
+                     f"-- retrying once with max_tokens={doubled}", file=sys.stderr)
+                return self._try_fireworks(entry, item, model, max_tokens=doubled)
             answer = out.answer
             if entry.prompt_template == "code_only":
                 answer = _strip_code_fence(answer)
-            return answer
+            return FireworksAttempt(answer, out.finish_reason, out.total_tokens)
         except Exception as e:  # noqa: BLE001 -- caller decides retry-vs-empty uniformly
             print(f"policy: task {item.id} call to {model} failed -- {e}", file=sys.stderr)
-            return ""
+            return FireworksAttempt("", None, 0)
 
     def route_task(self, task: Dict[str, Any], idx: int) -> Dict[str, Any]:
         try:
@@ -220,26 +296,117 @@ class PolicyRouter:
         item = Item(id=task_id, task_type=cls.category, input=prompt, gold=None, scorer="exact")
 
         if entry.tier == "local" and self.local is not None:
-            timeout_s = entry.timeout_s or self.default_timeout_s
-            try:
-                future = self._executor.submit(self.local.run, item, timeout_s)
-                out = future.result(timeout=timeout_s)
-                return {"task_id": task_id, "answer": out.answer}
-            except Exception as e:  # noqa: BLE001 -- timeout or any local failure degrades to Fireworks
-                print(f"policy: local call for {task_id} timed out/failed ({e}) "
-                     f"-- falling back to Fireworks", file=sys.stderr)
+            if (self.local_budget_s is not None
+                    and self._local_spent_s >= self.local_budget_s):
+                print(f"policy: task {task_id} local budget exhausted "
+                     f"({self._local_spent_s:.0f}s >= {self.local_budget_s:.0f}s) "
+                     f"-- going straight to Fireworks", file=sys.stderr)
+            else:
+                timeout_s = entry.timeout_s or self.default_timeout_s
+                local_system = _system_prompt(entry.local_prompt_template
+                                              or entry.prompt_template)
+                started = time.monotonic()
+                try:
+                    future = self._executor.submit(self.local.run, item, timeout_s,
+                                                   local_system)
+                    out = future.result(timeout=timeout_s)
+                    # A local answer is only kept if it passes the deterministic
+                    # shape check for its category (localcheck.py). Rejection
+                    # just means the task pays the remote price it would have
+                    # paid anyway -- acceptance of a bad answer is the only
+                    # failure mode that costs accuracy, so the check is strict.
+                    problem = local_answer_problem(cls.category, prompt, out.answer)
+                    # D52/D53 self-consistency: content-unverifiable categories
+                    # draw a SECOND sample; the two must agree or the task
+                    # escalates. D53: the second sample uses an ALTERNATE
+                    # PROMPT WORDING at temperature 0 when one is defined
+                    # (DIVERSITY_PROMPT_TEMPLATES) -- prompt diversity
+                    # decorrelates arithmetic/deduction slips without the
+                    # sampling noise that temp 0.7 injected (observed making
+                    # the second math sample WORSE, not just different).
+                    # Fallback for templates without an alternate: same
+                    # prompt at temperature 0.7 (the D52 behavior). The
+                    # first (temperature-0, primary-prompt) sample is the
+                    # one delivered.
+                    if problem is None and entry.local_n_samples >= 2:
+                        alt = DIVERSITY_PROMPT_TEMPLATES.get(
+                            entry.local_prompt_template or "")
+                        sys2, temp2 = (alt, 0.0) if alt else (local_system, 0.7)
+                        future2 = self._executor.submit(self.local.run, item, timeout_s,
+                                                        sys2, temp2)
+                        out2 = future2.result(timeout=timeout_s)
+                        problem = agreement_problem(cls.category, out.answer, out2.answer)
+    # D54: one FREE local format-retry before paying for an
+                    # escalation. The failure reason is injected into the
+                    # retry prompt ("rejected because: X -- fix exactly
+                    # that"); the retry must pass the SAME validator and,
+                    # for n>=2 categories, a fresh agreement check -- no
+                    # fence is weakened, rejections just get a second free
+                    # attempt. Skipped when the local budget is gone, and
+                    # for PROMPT-property failures no retry can ever fix
+                    # (the 19-task timing gate caught retries burning ~15s
+                    # each on example-less code tasks -- pure waste).
+                    unfixable = problem is not None and problem.startswith(
+                        "no verifiable input/output examples")
+                    if (problem is not None and not unfixable
+                            and (self.local_budget_s is None
+                                 or time.monotonic() - started + self._local_spent_s
+                                 < self.local_budget_s)):
+                        retry_system = (
+                            f"{local_system}\nIMPORTANT: your previous attempt "
+                            f"was rejected because: {problem}. Produce a "
+                            f"corrected answer that fixes exactly that.")
+                        print(f"policy: task {task_id} local answer rejected "
+                             f"({problem}) -- one free local retry", file=sys.stderr)
+                        future_r = self._executor.submit(self.local.run, item,
+                                                         timeout_s, retry_system)
+                        out_r = future_r.result(timeout=timeout_s)
+                        problem_r = local_answer_problem(cls.category, prompt,
+                                                         out_r.answer)
+                        if problem_r is None and entry.local_n_samples >= 2:
+                            alt = DIVERSITY_PROMPT_TEMPLATES.get(
+                                entry.local_prompt_template or "")
+                            sys2, temp2 = (alt, 0.0) if alt else (local_system, 0.7)
+                            future2r = self._executor.submit(self.local.run, item,
+                                                             timeout_s, sys2, temp2)
+                            out2r = future2r.result(timeout=timeout_s)
+                            problem_r = agreement_problem(cls.category, out_r.answer,
+                                                          out2r.answer)
+                        if problem_r is None:
+                            out, problem = out_r, None
+                        else:
+                            problem = f"{problem}; retry also failed ({problem_r})"
+                    if problem is None:
+                        self._local_spent_s += time.monotonic() - started
+                        answer = out.answer
+                        # Local code answers need the same fence-strip the
+                        # remote path applies -- fenced code is the D27
+                        # judge-fail mode, and gating caught a kept local
+                        # answer shipping with ```python fences intact.
+                        if entry.prompt_template == "code_only":
+                            answer = _strip_code_fence(answer)
+                        print(f"policy: task {task_id} answered LOCALLY -- 0 remote tokens "
+                             f"({out.tokens} free local completion tokens, "
+                             f"local budget used {self._local_spent_s:.0f}s)", file=sys.stderr)
+                        return {"task_id": task_id, "answer": answer}
+                    print(f"policy: task {task_id} local answer REJECTED ({problem}) "
+                         f"-- escalating to Fireworks", file=sys.stderr)
+                except Exception as e:  # noqa: BLE001 -- timeout or any local failure degrades to Fireworks
+                    print(f"policy: local call for {task_id} timed out/failed ({e}) "
+                         f"-- falling back to Fireworks", file=sys.stderr)
+                self._local_spent_s += time.monotonic() - started
 
         answer = ""
         try:
             primary_model = _resolve_model(entry, self.allowed_models)
-            answer = self._try_fireworks(entry, item, primary_model)
+            answer = self._try_fireworks(entry, item, primary_model).answer
             if _is_blank(answer):
                 retry_model = self._pick_retry_model(primary_model)
                 if retry_model is not None:
                     print(f"policy: task {task_id} blank/failed answer from {primary_model} "
                          f"-- retrying once with {retry_model} (empty is the last resort, "
                          f"not the first fallback)", file=sys.stderr)
-                    answer = self._try_fireworks(entry, item, retry_model)
+                    answer = self._try_fireworks(entry, item, retry_model).answer
                     if _is_blank(answer):
                         print(f"policy: task {task_id} still blank after retry with "
                              f"{retry_model} -- falling back to empty answer", file=sys.stderr)
@@ -251,11 +418,36 @@ class PolicyRouter:
             answer = ""
         return {"task_id": task_id, "answer": answer}
 
+    # D55: when the local budget can exhaust mid-batch (slow grading
+    # hardware), the tasks processed EARLY get local attempts and the tail
+    # goes straight to paid remote -- so process cheapest local categories
+    # first to maximize keeps-per-second before exhaustion. Output order is
+    # restored to input order afterwards; the {task_id, answer} contract is
+    # untouched. Categories not listed (code needs example-proof, remote
+    # tiers) sort last -- their local attempts are longest/least likely to
+    # keep, or they never attempt local at all.
+    _LOCAL_COST_ORDER = {"sentiment": 0, "entity_extraction": 1,
+                         "summarization": 2, "general": 3, "knowledge": 3,
+                         "math": 4}
+
     def route_all(self, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         try:
-            return [self.route_task(t, i) for i, t in enumerate(tasks)]
+            order = sorted(
+                range(len(tasks)),
+                key=lambda i: self._LOCAL_COST_ORDER.get(
+                    self.classifier.classify(_task_prompt(tasks[i], i)).category
+                    if self._safe_prompt(tasks[i], i) is not None else "", 9))
+            results_by_pos = {i: self.route_task(tasks[i], i) for i in order}
+            return [results_by_pos[i] for i in range(len(tasks))]
         finally:
             self.close()
+
+    @staticmethod
+    def _safe_prompt(task: Dict[str, Any], idx: int) -> Optional[str]:
+        try:
+            return _task_prompt(task, idx)
+        except ValueError:
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +456,7 @@ class PolicyRouter:
 
 def generate_policy(local_viability: Dict[str, LocalViability],
                     bakeoff_ranking: Dict[str, List[ModelCategoryRanking]],
-                    max_tokens: int = 256, prompt_template: str = "default",
+                    max_tokens: int = 512, prompt_template: str = "default",
                     ) -> Dict[str, Dict[str, Any]]:
     categories = sorted(set(local_viability) | set(bakeoff_ranking))
     policy: Dict[str, Dict[str, Any]] = {}
