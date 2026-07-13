@@ -1,0 +1,78 @@
+{
+  "__comment__": "Gemma line (2026-07-12, second-account submission). Remote model = the GEMMA_SENTINEL 'gemma' for EVERY category -> resolved from env GEMMA_MODEL_ID at runtime, with per-call fallback to kimi-k2p7-code on any Gemma failure (policy.py). Remote/escalation templates are the FULLER pre-trim D43-era ones (small models need more scaffolding than the kimi-trimmed templates): math/summarization/_default use accurate_full, entity uses entity_typed, logic uses logic_answer_last, sentiment/code keep their D43 templates. The LOCAL tier config (tier, local_prompt_template, local_n_samples, timeout_s) is COPIED VERBATIM from the proven kimi default policy -- no local-model changes.",
+  "code": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
+  },
+  "code_debug": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
+  },
+  "code_gen": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "code_only",
+    "local_prompt_template": "code_local",
+    "timeout_s": 45,
+    "local_n_samples": 1
+  },
+  "sentiment": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "sentiment_with_justification",
+    "local_prompt_template": "sentiment_local",
+    "timeout_s": 20
+  },
+  "math": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "accurate_full",
+    "local_prompt_template": "math_local",
+    "local_n_samples": 2,
+    "timeout_s": 60
+  },
+  "entity_extraction": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "entity_typed",
+    "local_prompt_template": "entity_local",
+    "timeout_s": 30
+  },
+  "summarization": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "accurate_full",
+    "local_prompt_template": "summarize_exact",
+    "timeout_s": 40
+  },
+  "logic": {
+    "tier": "fireworks",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "logic_answer_last"
+  },
+  "_default": {
+    "tier": "local",
+    "model": "gemma",
+    "max_tokens": 512,
+    "prompt_template": "accurate_full",
+    "local_prompt_template": "knowledge_local",
+    "local_n_samples": 2,
+    "timeout_s": 45
+  }
+}

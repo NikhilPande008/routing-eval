@@ -138,7 +138,10 @@ _CODE_SYNTAX_RE = re.compile(
     r"|\bdef\s+\w+\s*\("                # python function signature
     r"|\breturns?\s+\w"                 # a `return`/`returns` statement
     r"|\bwhile\s+\w+\s*[<>=!]"          # a while-loop condition
-    r"|:\s*\n\s+\S"                     # colon + newline + indent (code block shape)
+    r"|:[ \t]*\n[ \t]+\S"               # colon + newline + REAL indent (code block shape);
+                                        # [ \t] not \s so "instruction:\n\n'passage'"
+                                        # (colon, blank line, unindented text -- the official
+                                        # summarization/NER prompt format) is NOT a false code hit
     r"|\bfor\s+\w+\s+in\s+\w+"          # for-loop / list-comprehension clause
     r"|\w\[\w*\]"                       # bracket indexing, e.g. items[idx]
     r"|\.\w+\("                         # dot method call, e.g. nums.reverse(

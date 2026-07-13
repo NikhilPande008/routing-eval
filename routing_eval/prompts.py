@@ -285,4 +285,5 @@ def load_category_templates(policy_path: str) -> Dict[str, str]:
     concern, irrelevant to picking a system prompt for a bake-off call."""
     with open(policy_path) as f:
         raw = json.load(f)
-    return {cat: entry.get("prompt_template", "default") for cat, entry in raw.items()}
+    return {cat: entry.get("prompt_template", "default") for cat, entry in raw.items()
+            if not cat.startswith("__")}

@@ -125,8 +125,18 @@ def run(input_path: str = DEFAULT_INPUT, output_path: str = DEFAULT_OUTPUT,
     # sweep stays under ~520s of the 600s total (D19) even worst-case.
     local_budget_s = _env_float("ROUTING_LOCAL_BUDGET_S", 330.0) if local else None
 
+    # POLICY_PATH env selects the policy file so ONE image serves both
+    # submission lines (2026-07-12): unset/empty => the checked-in kimi
+    # default (DEFAULT_POLICY_PATH), UNCHANGED; the Gemma line's image bakes
+    # POLICY_PATH=/app/routing_eval/routing_policy.gemma.json via a Docker
+    # build arg. An explicit policy_path arg (tests/CLI) still wins over env.
+    resolved_policy_path = (policy_path or (os.environ.get("POLICY_PATH") or "").strip()
+                            or DEFAULT_POLICY_PATH)
+    if resolved_policy_path != DEFAULT_POLICY_PATH:
+        print(f"conformance: using policy {resolved_policy_path}", file=sys.stderr)
+
     router = PolicyRouter(
-        policy=load_policy(policy_path or DEFAULT_POLICY_PATH),
+        policy=load_policy(resolved_policy_path),
         remote_client=client, allowed_models=allowed_models, classifier=classifier,
         local=local, low_confidence_threshold=low_confidence_threshold,
         default_timeout_s=default_timeout_s, local_budget_s=local_budget_s)

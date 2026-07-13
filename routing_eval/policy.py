@@ -161,7 +161,10 @@ SAFE_FALLBACK_ENTRY = PolicyEntry(tier="fireworks", model=None, max_tokens=512,
 def load_policy(path: str = DEFAULT_POLICY_PATH) -> Dict[str, PolicyEntry]:
     with open(path) as f:
         raw = json.load(f)
-    return {cat: PolicyEntry.from_dict(entry) for cat, entry in raw.items()}
+    # __-prefixed keys are JSON's stand-in for comments (e.g. "__comment__" in
+    # routing_policy.gemma.json) -- not policy entries; skip them.
+    return {cat: PolicyEntry.from_dict(entry) for cat, entry in raw.items()
+            if not cat.startswith("__")}
 
 
 def resolve_entry(policy: Dict[str, PolicyEntry], category: str) -> PolicyEntry:
@@ -171,8 +174,43 @@ def resolve_entry(policy: Dict[str, PolicyEntry], category: str) -> PolicyEntry:
     return policy.get(category) or policy.get(_DEFAULT_KEY) or SAFE_FALLBACK_ENTRY
 
 
+# --- Gemma line (2026-07-12, second-account submission) --------------------
+# A policy entry whose remote model is the sentinel GEMMA_SENTINEL means
+# "resolve the Gemma model id from env GEMMA_MODEL_ID at call time, and fall
+# back per-call to kimi if the Gemma call fails". The sentinel keeps the
+# Gemma model id OUT of the checked-in policy (it isn't known until runtime)
+# and lets ONE image serve both the kimi line (POLICY_PATH default) and the
+# Gemma line (POLICY_PATH=routing_policy.gemma.json) with no code branch.
+GEMMA_SENTINEL = "gemma"
+KIMI_FALLBACK_MODEL = "kimi-k2p7-code"
+
+
+def _kimi_fallback(allowed_models: List[str]) -> str:
+    """kimi-k2p7-code from ALLOWED_MODELS (already normalized), or the
+    normalized literal if ALLOWED_MODELS somehow lacks it -- so the accuracy
+    gate survives even a misconfigured ALLOWED_MODELS."""
+    for m in allowed_models:
+        if m == KIMI_FALLBACK_MODEL or m.endswith("/" + KIMI_FALLBACK_MODEL):
+            return m
+    return normalize_model_id(KIMI_FALLBACK_MODEL)
+
+
+def _is_gemma_entry(entry: PolicyEntry) -> bool:
+    return entry.model == GEMMA_SENTINEL
+
+
 def _resolve_model(entry: PolicyEntry, allowed_models: List[str]) -> str:
     if entry.model:
+        if entry.model == GEMMA_SENTINEL:
+            gemma_id = (os.environ.get("GEMMA_MODEL_ID") or "").strip()
+            if not gemma_id:
+                # No Gemma configured at runtime -> use the kimi fallback
+                # directly. The whole Gemma line degrades to the proven kimi
+                # path, and the accuracy gate is unaffected.
+                print("policy: GEMMA_MODEL_ID unset -- Gemma entry resolves "
+                     "straight to the kimi fallback", file=sys.stderr)
+                return _kimi_fallback(allowed_models)
+            return normalize_model_id(gemma_id)
         return normalize_model_id(entry.model)   # hand-authored entries may be bare names
     if not allowed_models:
         raise ValueError("policy entry has no model and ALLOWED_MODELS is empty")
@@ -234,8 +272,12 @@ class PolicyRouter:
                 return m
         return None
 
+    def _kimi_fallback_model(self) -> str:
+        return _kimi_fallback(self.allowed_models)
+
     def _try_fireworks(self, entry: PolicyEntry, item: Item, model: str,
-                       max_tokens: Optional[int] = None) -> FireworksAttempt:
+                       max_tokens: Optional[int] = None,
+                       fallback_model: Optional[str] = None) -> FireworksAttempt:
         """One attempt against a specific model. Never raises -- any failure
         (exception or a blank response) returns an empty FireworksAttempt so
         the caller can retry with a different model uniformly regardless of
@@ -249,7 +291,14 @@ class PolicyRouter:
         with a doubled cap (`max_tokens` passed explicitly on the recursive
         call, which is what stops it from ever doubling more than once). A
         truncated answer is a guaranteed judge failure (D18), so this is
-        cheap insurance -- at most one extra call, only when actually needed."""
+        cheap insurance -- at most one extra call, only when actually needed.
+
+        Gemma line (2026-07-12): `fallback_model` is set only for a Gemma
+        entry. On ANY Gemma failure -- exception (404/model-not-found/timeout)
+        OR a blank response -- this retries ONCE, per-call, with the kimi
+        fallback and logs it. The recursion carries `fallback_model=None` so
+        the kimi attempt can't loop; the accuracy gate survives every Gemma
+        outage scenario, task by task."""
         system = _system_prompt(entry.prompt_template)
         timeout_s = entry.timeout_s or self.default_timeout_s
         tokens_cap = max_tokens or entry.max_tokens
@@ -265,13 +314,22 @@ class PolicyRouter:
                 doubled = tokens_cap * 2
                 print(f"policy: task {item.id} answer TRUNCATED at max_tokens={tokens_cap} "
                      f"-- retrying once with max_tokens={doubled}", file=sys.stderr)
-                return self._try_fireworks(entry, item, model, max_tokens=doubled)
+                return self._try_fireworks(entry, item, model, max_tokens=doubled,
+                                           fallback_model=fallback_model)
+            if _is_blank(out.answer) and fallback_model and fallback_model != model:
+                print(f"policy: task {item.id} Gemma model {model} returned BLANK "
+                     f"-- per-call fallback to {fallback_model}", file=sys.stderr)
+                return self._try_fireworks(entry, item, fallback_model, max_tokens=max_tokens)
             answer = out.answer
             if entry.prompt_template == "code_only":
                 answer = _strip_code_fence(answer)
             return FireworksAttempt(answer, out.finish_reason, out.total_tokens)
         except Exception as e:  # noqa: BLE001 -- caller decides retry-vs-empty uniformly
             print(f"policy: task {item.id} call to {model} failed -- {e}", file=sys.stderr)
+            if fallback_model and fallback_model != model:
+                print(f"policy: task {item.id} Gemma model {model} FAILED ({e}) "
+                     f"-- per-call fallback to {fallback_model}", file=sys.stderr)
+                return self._try_fireworks(entry, item, fallback_model, max_tokens=max_tokens)
             return FireworksAttempt("", None, 0)
 
     def route_task(self, task: Dict[str, Any], idx: int) -> Dict[str, Any]:
@@ -399,7 +457,9 @@ class PolicyRouter:
         answer = ""
         try:
             primary_model = _resolve_model(entry, self.allowed_models)
-            answer = self._try_fireworks(entry, item, primary_model).answer
+            gemma_fallback = self._kimi_fallback_model() if _is_gemma_entry(entry) else None
+            answer = self._try_fireworks(entry, item, primary_model,
+                                         fallback_model=gemma_fallback).answer
             if _is_blank(answer):
                 retry_model = self._pick_retry_model(primary_model)
                 if retry_model is not None:

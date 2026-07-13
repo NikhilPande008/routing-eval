@@ -59,5 +59,18 @@ RUN useradd --create-home --uid 10001 appuser \
 COPY docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh /app/llama/llama-server
 
+# 2026-07-12: ONE Dockerfile builds BOTH submission lines. Default (no build
+# args) = the checked-in kimi policy, IDENTICAL to every prior submission.
+# The Gemma line's image is built with:
+#   --build-arg POLICY_PATH=/app/routing_eval/routing_policy.gemma.json
+#   --build-arg GEMMA_MODEL_ID=<the gemma model id>   (optional; unset => the
+#       Gemma entries resolve straight to the kimi fallback, accuracy-safe)
+# conformance.py reads POLICY_PATH; policy.py reads GEMMA_MODEL_ID. Empty
+# (the default) is falsy in both, so the kimi line is unaffected.
+ARG POLICY_PATH=""
+ENV POLICY_PATH=${POLICY_PATH}
+ARG GEMMA_MODEL_ID=""
+ENV GEMMA_MODEL_ID=${GEMMA_MODEL_ID}
+
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["score"]

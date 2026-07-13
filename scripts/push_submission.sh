@@ -36,6 +36,17 @@ if [[ -z "$TAG" ]]; then
 fi
 REF="$REPO:$TAG"
 
+# --- FROZEN-ACCOUNT PUSH GUARD (hardcoded, 2026-07-12) ---------------------
+# Account 1 (nikhilpande/routing-eval) is SUBMITTED and FROZEN. Refuse any
+# push to it, from any invocation, regardless of args/env. Hard stop -- the
+# account-2 Gemma line uses scripts/push_account2.sh with a different repo.
+case "$REPO/" in
+  *nikhilpande/routing-eval/*)
+    echo "PUSH GUARD: refusing to push to FROZEN account-1 repo '$REPO'." >&2
+    echo "  Account 1's 17/19 line is submitted and frozen. Nothing may overwrite it." >&2
+    exit 2 ;;
+esac
+
 # --- preflight -------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   echo "push_submission: docker not installed." >&2

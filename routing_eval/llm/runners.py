@@ -15,6 +15,7 @@ temperature=0, reasoning_effort='none' (reasoning tokens are billed) are kept
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -32,8 +33,32 @@ def build_messages(item: Item, system: Optional[str] = None) -> List[Dict[str, s
     return msgs
 
 
+_CHANNEL_FINAL_RE = re.compile(r"<\|channel\|?>\s*final\b.*?(?:<\|message\|?>)?",
+                               re.IGNORECASE | re.DOTALL)
+_CONTROL_TOKEN_RE = re.compile(r"<\|[^>]*\|?>")
+_REASONING_LABEL_RE = re.compile(r"^\s*(?:thought|analysis|assistant)\b\s*[:\n]",
+                                 re.IGNORECASE)
+
+
+def _strip_control_channels(text: str) -> str:
+    """Defensive strip of leaked reasoning-channel control tokens (2026-07-13,
+    Gemma battery). reasoning_effort='none' normally suppresses these, but a
+    raw call showed gemma-4-31b-it CAN emit '<|channel>thought...' scaffolding
+    -- if any slips through it would corrupt the judge verdict and inflate the
+    token count. No-op unless a '<|' control marker is actually present, so it
+    never touches clean answers (kimi, or a suppressed Gemma answer)."""
+    if "<|" not in text:
+        return text
+    m = _CHANNEL_FINAL_RE.split(text)
+    if len(m) > 1:                      # keep only the final channel's message
+        text = m[-1]
+    text = _CONTROL_TOKEN_RE.sub("", text)
+    text = _REASONING_LABEL_RE.sub("", text)
+    return text.strip()
+
+
 def _content(choice: Dict[str, Any]) -> str:
-    return choice["message"]["content"]
+    return _strip_control_channels(choice["message"]["content"])
 
 
 def _token_logprobs(choice: Dict[str, Any]) -> List[float]:

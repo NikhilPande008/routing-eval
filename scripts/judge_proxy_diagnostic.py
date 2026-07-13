@@ -34,6 +34,7 @@ import json
 import os
 import sys
 from collections import defaultdict
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -41,8 +42,8 @@ from routing_eval.llm import OpenAICompatibleClient  # noqa: E402
 from routing_eval.llm.runners import LocalRunner, RemoteRunner  # noqa: E402
 from routing_eval.localcheck import local_answer_problem  # noqa: E402
 from routing_eval.modelids import normalize_model_id, split_models  # noqa: E402
-from routing_eval.policy import (DEFAULT_POLICY_PATH, PolicyRouter, _resolve_model,  # noqa: E402
-                                 _system_prompt, load_policy, resolve_entry)
+from routing_eval.policy import (DEFAULT_POLICY_PATH, PolicyRouter, _is_gemma_entry,  # noqa: E402
+                                 _resolve_model, _system_prompt, load_policy, resolve_entry)
 from routing_eval.schema import Item  # noqa: E402
 from routing_eval.taskio import load_tasks, task_id as _task_id, task_prompt as _task_prompt  # noqa: E402
 
@@ -104,20 +105,36 @@ def answer_with_diagnostics(router: PolicyRouter, task_id: str, prompt: str):
         print(f"    local answer rejected ({problem}) -- escalating", file=sys.stderr)
 
     primary_model = _resolve_model(entry, router.allowed_models)
-    attempt = router._try_fireworks(entry, item, primary_model)
+    # Gemma line: on any Gemma failure/blank, _try_fireworks falls back
+    # per-call to kimi (fallback_model set only for a Gemma entry).
+    fallback = router._kimi_fallback_model() if _is_gemma_entry(entry) else None
+    attempt = router._try_fireworks(entry, item, primary_model, fallback_model=fallback)
     if not attempt.answer or not attempt.answer.strip():
         retry_model = router._pick_retry_model(primary_model)
         if retry_model is not None:
-            attempt = router._try_fireworks(entry, item, retry_model)
+            attempt = router._try_fireworks(entry, item, retry_model, fallback_model=fallback)
     return cls.category, entry.prompt_template, attempt
 
 
-def judge(client, task_prompt: str, answer: str):
-    judge_input = (
-        f"TASK:\n{task_prompt}\n\nANSWER:\n{answer}\n\n"
-        "Does this answer correctly and completely fulfill what the task asked? "
-        "Reply PASS or FAIL with one line why."
-    )
+def judge(client, task_prompt: str, answer: str, rubric: Optional[str] = None):
+    """Grade an answer with the minimax judge-proxy. When `rubric` is given
+    (official_tasks.json carries the Expected rubric text verbatim), the judge
+    grades strictly against that rubric text -- exactly the pass/fail criteria
+    the official judge uses -- instead of the generic 'fulfills the task?'."""
+    if rubric:
+        judge_input = (
+            f"TASK:\n{task_prompt}\n\n"
+            f"GRADING RUBRIC (grade strictly and only against this):\n{rubric}\n\n"
+            f"ANSWER:\n{answer}\n\n"
+            "Does the answer satisfy every requirement of the rubric? "
+            "Reply PASS or FAIL with one line why."
+        )
+    else:
+        judge_input = (
+            f"TASK:\n{task_prompt}\n\nANSWER:\n{answer}\n\n"
+            "Does this answer correctly and completely fulfill what the task asked? "
+            "Reply PASS or FAIL with one line why."
+        )
     item = Item(id="judge", task_type="judge", input=judge_input, gold=None, scorer="exact")
     remote = RemoteRunner(client, model=normalize_model_id(JUDGE_MODEL),
                           max_tokens=JUDGE_MAX_TOKENS, system=JUDGE_SYSTEM)

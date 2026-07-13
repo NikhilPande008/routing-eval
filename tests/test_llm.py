@@ -86,3 +86,18 @@ def test_real_client_builds_request_and_parses(monkeypatch):
     assert captured["headers"]["authorization"] == "Bearer sk-test"
     assert captured["body"]["model"] == "m" and captured["body"]["max_tokens"] == 8
     assert resp["choices"][0]["message"]["content"] == "4"
+
+
+def test_strip_control_channels_gemma_reasoning_leak():
+    """2026-07-13: gemma-4-31b-it can leak '<|channel>thought...' scaffolding
+    if reasoning_effort='none' fails to suppress it. _content strips it so a
+    leak can't corrupt a judge verdict; clean answers are untouched."""
+    from routing_eval.llm.runners import _strip_control_channels as s
+    # harmony final-channel form -> keep only the final answer
+    assert s("<|channel|>analysis<|message|>reasoning<|channel|>final"
+             "<|message|>Mixed: both sides") == "Mixed: both sides"
+    # bare control token stripped
+    assert "<|" not in s("<|channel>thought\nBlah\nAnswer: 68")
+    # clean answers are byte-identical no-ops (kimi, or suppressed Gemma)
+    assert s("Mixed: fantastic but slow") == "Mixed: fantastic but slow"
+    assert s("1,672 units.\n(2400-888)+800-640") == "1,672 units.\n(2400-888)+800-640"
