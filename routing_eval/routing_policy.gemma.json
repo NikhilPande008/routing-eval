@@ -1,5 +1,5 @@
 {
-  "__comment__": "Gemma HONEST + TRIMMED line (2026-07-13, gemma-4). Same as gemma-3 (Gemma is PRIMARY for sentiment/entity/summarization/knowledge; math+logic->kimi; code local->kimi) but knowledge & summarization use the concise d47 'default' template instead of accurate_full, to cut ~150 prompt tokens/task and shorter completions while keeping every content requirement (2-5 sentence explanations, multi-part answers, exact length/format constraints). REQUIRES warm deployment (min replicas 1) or Gemma calls 503 into the kimi fallback.",
+  "__comment__": "Gemma HONEST line (2026-07-13, gemma-3). Gemma is the PRIMARY answerer (tier=fireworks, model='gemma' sentinel -> GEMMA_MODEL_ID) for the four categories the competence battery showed it is genuinely strong at: sentiment, entity_extraction, summarization, and _default/knowledge (official proxy: sentiment 2/2, entity 1/1, summarization 2/2, knowledge 3/3). These are NOT local-first, so Gemma actually serves them rather than catching rare local-tier escalations. math and logic go to kimi-k2p7-code (Gemma reproducibly fails multi-step % arithmetic; logic is historically flaky). code stays local-first -> kimi (cheap, Gemma not needed). REQUIRES a WARM deployment (Fireworks console: deployment min replicas = 1, disable scale-to-zero) or every Gemma call 503s into the kimi fallback and the entry becomes cosmetic again. Per-call kimi fallback (policy.py) still protects accuracy if Gemma has a transient failure.",
   "code": {
     "tier": "local",
     "model": "kimi-k2p7-code",
@@ -49,7 +49,7 @@
     "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "default"
+    "prompt_template": "accurate_full"
   },
   "logic": {
     "tier": "fireworks",
@@ -61,6 +61,6 @@
     "tier": "fireworks",
     "model": "gemma",
     "max_tokens": 512,
-    "prompt_template": "default"
+    "prompt_template": "accurate_full"
   }
 }

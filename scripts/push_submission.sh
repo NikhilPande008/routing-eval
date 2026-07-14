@@ -36,16 +36,28 @@ if [[ -z "$TAG" ]]; then
 fi
 REF="$REPO:$TAG"
 
-# --- FROZEN-ACCOUNT PUSH GUARD (hardcoded, 2026-07-12) ---------------------
-# Account 1 (nikhilpande/routing-eval) is SUBMITTED and FROZEN. Refuse any
-# push to it, from any invocation, regardless of args/env. Hard stop -- the
-# account-2 Gemma line uses scripts/push_account2.sh with a different repo.
-case "$REPO/" in
-  *nikhilpande/routing-eval/*)
-    echo "PUSH GUARD: refusing to push to FROZEN account-1 repo '$REPO'." >&2
-    echo "  Account 1's 17/19 line is submitted and frozen. Nothing may overwrite it." >&2
-    exit 2 ;;
-esac
+# --- FROZEN-TAG PUSH GUARD (hardcoded, updated 2026-07-14) -----------------
+# Clarified 2026-07-14, user-confirmed: "frozen" scopes to the two ORIGINAL
+# rollback pointer tags specifically -- submission-amd64 (the live submission
+# pointer) and submission-17of19 (the durable 17/19 rollback) -- not the
+# whole repo. New immutable tags (submission-gemma-2/3/4, ...) have been
+# pushed here since, confirmed as the intended workflow (no separate Gemma
+# evaluation track -- a submission is just graded on whatever the container
+# actually does, so relabeling which config sits on a given tag is not a
+# disclosure concern). This guard blocks overwriting those two named tags
+# only; the generic "refuse to overwrite an EXISTING tag" check below still
+# protects every other tag from accidental reuse.
+_FROZEN_TAGS=("submission-amd64" "submission-17of19")
+if [[ "$REPO" == "docker.io/nikhilpande/routing-eval" ]]; then
+  for _frozen in "${_FROZEN_TAGS[@]}"; do
+    if [[ "$TAG" == "$_frozen" ]]; then
+      echo "PUSH GUARD: refusing to push to FROZEN rollback tag '$REPO:$TAG'." >&2
+      echo "  This is one of the two protected pointers (${_FROZEN_TAGS[*]})." >&2
+      echo "  Push a new tag instead." >&2
+      exit 2
+    fi
+  done
+fi
 
 # --- preflight -------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
