@@ -1,145 +1,186 @@
-# routing-eval (P1)
+# Token-Efficient Routing Agent — AMD Developer Hackathon (Track 1)
 
-The measurement instrument for a token-vs-accuracy cascade router. It answers
-the one question you cannot answer by intuition: **given an accuracy floor, what
-is the fewest remote tokens you can spend, and which gate gets you there?**
+A cost-aware LLM router that answers each task with the cheapest source that
+can get it right: a **bundled local model first**, gated by **deterministic
+validators**, escalating to a **frontier remote model only on proven doubt**.
 
-Built for the AMD Developer Hackathon ACT II, Track 1 (Hybrid Token-Efficient
-Routing Agent), where the score is remote token count + accuracy on a hidden
-standardized environment. Local-model tokens count as zero.
+Built for AMD Developer Hackathon ACT II, Track 1, where entries are graded by
+an external LLM judge and **ranked by remote token count after clearing an 80%
+accuracy gate**. Local-model tokens count as zero toward the score.
 
-Runtime dependencies: **none** (pure standard library). `pytest` is used only
-for the test suite. This matters: the submission must run on a clean container.
+**Runtime dependencies: none** (pure Python standard library). The container
+runs on a clean environment with no third-party runtime installs. `pytest` is
+dev-only.
 
 ---
 
-## The one idea: record-then-replay
+## TL;DR — what shipped and how it scored
 
-The expensive step and the tuning step are decoupled.
+| Config | Accuracy (live) | Remote tokens (live) | What it is |
+|---|---|---|---|
+| **Final kimi line** | **89.5% (17/19)** | **4,390** | bundled 1.5B local tier + kimi escalation, validator-gated |
+| High-accuracy remote line | 94.7–100% | 5,500–6,100 | mostly-remote; used to probe the accuracy ceiling |
 
-1. **Run once (costs tokens/compute):** run the local model and the remote model
-   on every eval item, score both, and write a `records.json`. Each record holds
-   everything needed to simulate *any* escalation threshold: both scores, the
-   remote token cost, and one or more gate confidence signals.
-2. **Sweep forever (free):** the frontier tracer reads `records.json` and sweeps
-   the escalation threshold τ. This is pure arithmetic — no model calls. Comparing
-   ten gates or re-tuning τ costs zero tokens.
+Every shipped config cleared the 80% gate across 11 live submissions. Token
+spend was driven from an inherited 5,139 down to a stable 3,600–4,400 band,
+while accuracy held or improved. The one target that proved **structurally
+unreachable** — sub-2,000 tokens *and* >80% — is explained under
+[Lessons](#engineering-lessons-the-honest-part).
 
-Consequence for the competition: you spend remote tokens on your whole dev set
-*once* to calibrate. In production you escalate only the low-confidence tail, so
-you spend far fewer. Cache `records.json` and never re-pay.
+---
 
-Consequence for building now: the entire frontier logic is testable today with
-mock models. P2 swaps real models into the same record schema; nothing
-downstream changes.
+## The problem
 
-## Why a cascade (not a predictive pre-router)
+- **Scored by an external LLM judge**, not a metric we control. Rubric grades
+  *intent and format*, not string match.
+- **Ranked by tokens once you pass the 80% gate.** Accuracy above the gate buys
+  no rank — so the game is *minimum tokens at ≥80%*, not maximum accuracy.
+- **Only remote (Fireworks) tokens are metered.** A correct answer from a model
+  running inside the container is free.
+- Hard constraints: 4 GB RAM / 2 vCPU grading VM, 10-minute total budget,
+  30 s/request, container reads `/input/tasks.json` → writes
+  `/output/results.json`.
 
-Because local tokens are free here, always attempting local first is costless and
-yields richer signals (logprobs, self-consistency) than a pre-router that decides
-before generating. A pre-router only helps as a latency optimization *if* the
-scoring env imposes a per-item time budget. Until we learn otherwise at kickoff,
-cascade strictly dominates.
+## Architecture: a validator-gated cascade
 
-The objective is a **constrained** optimization: minimize remote tokens subject
-to accuracy ≥ floor. The floor is a constraint, not the objective. The optimal
-operating point therefore sits just above the floor plus a safety margin sized to
-eval-set variance — the aggressive edge. You cannot find that edge without the
-frontier, which is why this harness is priority one.
+```
+task ─▶ classify category ─▶ policy lookup
+                                  │
+                    ┌─────────────┴─────────────┐
+              tier: local                   tier: fireworks
+                    │                             │
+        bundled model answers            remote model answers
+                    │                     (kimi / frontier)
+         deterministic validators                │
+         + self-consistency check                │
+                    │                             │
+         pass ──▶ keep (0 tokens)                 │
+         fail ──▶ escalate ────────────────────▶ ┘
+```
 
-## Quickstart
+The design rests on three ideas:
+
+1. **Cascade, not a pre-router.** Local tokens are free, so *attempting* local
+   first is costless and yields richer signals (validator outcomes,
+   self-consistency) than deciding before generating.
+2. **The intelligence lives in the gate.** A local answer is kept only if it
+   passes a deterministic, stdlib-only shape check for its category. Any doubt
+   escalates. The asymmetry is deliberate: **a rejected local answer only costs
+   tokens; an accepted bad answer costs accuracy** — so the checks are strict
+   and over-escalation is the cheap failure mode.
+3. **Graceful degradation everywhere.** No local model, a wedged server, a
+   transient remote error, or slow hardware all fall back to the proven remote
+   path. The container never crashes on a single task; a failed task still emits
+   a valid (empty-if-necessary) response.
+
+### The validators (`routing_eval/localcheck.py`)
+
+Deterministic checks that gate local answers, tuned to the official rubric:
+
+- **Sentiment** — label present and from the allowed set; a mixed review must
+  acknowledge *both* sides (a one-sided justification fails regardless of label).
+- **NER** — `entity -- TYPE` lines using only the official four labels
+  (PERSON/ORGANIZATION/LOCATION/DATE); every entity verified verbatim in the
+  source; a date split across two lines is caught and escalated.
+- **Summarization** — exact sentence/bullet counts and per-bullet word caps
+  enforced; summary must be shorter than the source.
+- **Math / knowledge** — two-sample self-consistency: a second sample at a
+  different temperature must agree (exact final-number match for math) or the
+  task escalates. Content the validators can't check gets this instead.
+
+### Robustness plumbing (`routing_eval/policy.py`)
+
+- **Batch-level time governor** — bounds total local wall-clock so slow
+  hardware degrades to remote-only rather than blowing the 10-minute budget.
+- **Cheapest-first ordering** — processes local-eligible tasks in order of
+  expected cost so the most keeps land before the governor exhausts.
+- **Escalation retry** — a blank/failed remote answer retries with a known-good
+  model, never an undeployed one (a real bug that once shipped an empty answer).
+- **Speed probe** — a startup latency check disables the local tier entirely on
+  hardware too slow to beat the per-request timeout.
+
+## Repository layout
+
+```
+routing_eval/
+  classify.py     category detectors (deterministic, phrase-level)
+  policy.py       the router: classify → local/remote → {task_id, answer}
+  localcheck.py   deterministic validators gating local answers
+  prompts.py      per-category system prompts
+  llm/            OpenAI-compatible client + local/remote runners
+  conformance.py  scoring entrypoint: /input/tasks.json → /output/results.json
+  frontier.py     token-vs-accuracy analysis harness (record-then-replay)
+  scorers.py      pluggable accuracy scorers
+scripts/          battery/diagnostic tooling, container smoke tests
+tests/            153 tests (routing, validators, frontier, conformance)
+Dockerfile        python:3.12-slim + this package (+ optional bundled model)
+```
+
+The container is configurable by build arg / env so **one image serves
+multiple model lines** — the policy file and remote model are selected at build
+or run time without a code change.
+
+## Running it
 
 ```bash
-# 1. generate records (mock models; deterministic)
-python -m routing_eval.cli run --dataset standin --n 150 --out records.json
-
-# 2. trace the frontier at an accuracy floor; compare all gate signals
-python -m routing_eval.cli frontier --records records.json \
-    --accuracy-threshold 0.85 --csv-out frontier.csv
-
 # tests
 PYTHONPATH=. python -m pytest -q
-```
 
-The `frontier` command reports, per gate signal: all-local and all-remote
-baselines, the **union ceiling** (the maximum accuracy any per-item router can
-reach — you cannot be right on an item unless at least one model is right), the
-**operating point** (min tokens to clear the floor with this gate), the
-**oracle** (min tokens with perfect knowledge), and **gate efficiency**
-(oracle / gate ≤ 1). Efficiency is the diagnostic: if it is low, improve the
-confidence signal; if even the oracle can't clear the floor, you are
-capability-limited and must improve the model, not the gate.
-
-## What the harness reads: the P1 ↔ P2 contract
-
-`routing_eval/schema.py` defines `Record` — the single boundary between this
-harness and the router. P2's job is to produce these records from real models.
-Key fields:
-
-- `local_score`, `remote_score` — floats in [0,1] from the task's scorer.
-- `remote_total_tokens` — what the competition counts if the item escalates.
-- `confidences: {name -> float}` — one score per candidate gate. **Convention:
-  higher = keep local** (less likely to escalate). A native signal pointing the
-  other way (entropy, perplexity) must be negated before storage.
-
-`routing_eval/runner.py` defines the `ModelRunner` protocol P2 implements, plus a
-reference sketch of the token-minimal Fireworks call (tight `max_tokens`, `stop`
-sequences, `reasoning_effort="none"`, `logprobs` for the gate).
-
-## Components
-
-- `frontier.py` — the tracer, oracle, operating point, gate efficiency. The core.
-- `scorers.py` — pluggable accuracy scorers (numeric, exact, multiple_choice,
-  token_f1, json_match, code_tests). Add the real metric here at kickoff.
-- `datasets.py` — synthetic, correct-by-construction stand-ins (math /
-  classification / qa) with a **dense borderline band** — the region where the
-  escalate/keep decision breaks and where happy-path testing lies to you.
-- `mock.py` — mock runners with knobs for local competence and gate calibration.
-  A validation instrument: it lets the tests assert that a better-calibrated gate
-  wins, which is the harness's entire reason to exist.
-- `report.py`, `cli.py` — rendering and the two commands.
-
-## Container
-
-The routing app containerizes with zero runtime dependencies — the base
-`python:3.12-slim` image plus this package is the whole footprint.
-
-```bash
+# build the scoring container
 docker build -t routing-eval .
-docker run --rm routing-eval --help
-# quickstart inside the image:
-docker run --rm --entrypoint sh routing-eval -c \
-  'routing-eval run --dataset standin --n 60 --out /tmp/r.json && \
-   routing-eval frontier --records /tmp/r.json --accuracy-threshold 0.80'
+
+# run the scoring contract locally (stub Fireworks server, no key needed)
+bash scripts/conformance_smoke.sh
+
+# real endpoint (requires FIREWORKS_BASE_URL / FIREWORKS_API_KEY / ALLOWED_MODELS)
+set -a && source .env && set +a
+REAL_FIREWORKS=1 bash scripts/conformance_smoke.sh
 ```
 
-`scripts/container_smoke.sh` runs exactly this as the clean-environment gate
-(it's what `routing:verify` calls). The default entrypoint is the calibration/eval
-CLI; the **scoring-time entrypoint that speaks to the hackathon's scoring harness
-is wired at kickoff**, once that interface is known.
+At grading, the harness injects `FIREWORKS_BASE_URL`, `FIREWORKS_API_KEY`, and
+`ALLOWED_MODELS`; the container reads `/input/tasks.json`, writes
+`/output/results.json`, and exits 0. A personal key is for local dev only and
+is never bundled into the image.
 
-## Scope: what is real vs. what is stubbed
+## Engineering lessons (the honest part)
 
-Real and tested (16 passing tests):
-- Frontier logic, verified against a 4-item case computed by hand: baselines,
-  non-monotonic accuracy (escalating a "remote-wrong / local-right" item lowers
-  accuracy), operating-point selection, exact oracle for binary scores,
-  infeasibility flag, gate efficiency.
-- The scorers listed above.
-- The full pipeline dataset → mock run → frontier, including the property that a
-  lower-noise gate reaches the floor with fewer tokens than a random or
-  anti-correlated one.
+The competition was an adversarial, slow-feedback optimization (grading turned
+around in tens of minutes to hours). The durable takeaways:
 
-Stubbed / not yet done:
-- **Real model runners (vLLM local + Fireworks remote) are P2.** Only the
-  protocol and a doc sketch exist here; no live calls are made.
-- `code_tests` executes model-generated code — documented interface only, **not**
-  exercised by the stand-in; run it only inside a sandbox.
-- The oracle is **exact for binary scores**; for graded scores (token_f1) it is a
-  greedy gain-per-token approximation, flagged as `approx` in the report.
+- **Offline evals predict little about live results.** Two structurally
+  different changes both passed every offline check (a lenient LLM judge-proxy,
+  throttled container gates, the full test suite) and both failed the real gate
+  at the *identical* 73.7%. Offline signal is directional; the live judge is the
+  only ground truth.
+- **Isolated single-variable changes beat bundled ones.** When a bundled change
+  fails and per-task results aren't exposed, you can't localize the cause.
+  Every subsequent change shipped as one attributable variable, each
+  live-validated before the next — which is what made regressions reversible.
+- **Draw-to-draw variance is large.** Each submission drew a fresh randomized
+  task set; token counts swung ±800–1,000 and accuracy by a task or two on
+  identical configs. Single-run comparisons between near-identical configs are
+  unreliable.
+- **Small local models have specific, catchable failure modes.** A 1.5–3B model
+  fails multi-step percentage arithmetic, splits multi-token date entities, and
+  gives one-sided justifications on mixed-sentiment reviews. Deterministic
+  validators + self-consistency convert an unreliable free tier into a safe one
+  via escalate-on-any-doubt — but they can't make it *accurate*, only *safe*.
+- **There is a real capability ceiling.** Sub-2,000 tokens *and* >80% requires a
+  local model strong enough to answer most tasks correctly for free. A 1.5B
+  isn't that model; a larger one failed on latency under the 2-vCPU budget. The
+  two targets are in direct conflict for the hardware on hand — a genuine
+  ceiling, not a tuning gap.
+- **Know where your code actually runs.** The grader injects its own
+  credentials, so a private on-demand model deployment in a participant's
+  account is unreachable at grading — it silently falls back to the shared
+  models. Verify the execution environment before building around a dependency.
 
-What this does **not** claim: that any particular gate or operating point will
-work on the real hackathon task. The real task's difficulty distribution, the
-revealed models' competence, and the real confidence signals are unknown until
-kickoff. The instrument is built and trustworthy; the operating point for the
-real task is measured on July 6, not asserted now.
+## Notes
+
+- Pure-stdlib package; the only non-Python bundled asset (an optional local
+  model + `llama.cpp` CPU server) ships as image layers, not as a Python
+  dependency.
+- The `frontier.py` harness implements a *record-then-replay* method: run local
+  and remote once over a dev set, then sweep the escalation threshold as pure
+  arithmetic — comparing gates and re-tuning at zero token cost.
+- No secrets, keys, or account identifiers are committed to this repository.
